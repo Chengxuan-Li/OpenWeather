@@ -34,8 +34,8 @@ dev = [
 [tool.ruff]
 target-version = "py311"
 line-length = 88
-select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "DTZ", "T10", "EM", "EXE", "FA", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PLR", "PLW", "PT", "PTH", "Q", "RSE", "RET", "SLF", "SLOT", "SIM", "TID", "TCH", "ARG", "PIE", "LOG", "TRV", "FURB", "TRY", "NPY", "AIR", "PERF", "FBT", "COM", "C90", "DTZ", "T10", "EM", "EXE", "FA", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PLR", "PLW", "PT", "PTH", "Q", "RSE", "RET", "SLF", "SLOT", "SIM", "TID", "TCH", "ARG", "PIE", "LOG", "TRV", "FURB", "TRY", "NPY", "AIR", "PERF", "FBT", "COM", "C90"]
-ignore = ["E501", "W503", "E203"]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "DTZ", "T10", "EM", "EXE", "FA", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PLR", "PLW", "PT", "PTH", "Q", "RSE", "RET", "SLF", "SLOT", "SIM", "TID", "TCH", "ARG", "PIE", "LOG", "TRV", "FURB", "TRY", "NPY", "AIR", "PERF", "FBT", "COM", "C90"]
+ignore = ["E501", "W503", "E203", "PLR0913", "PLR0912", "PLR0915"]
 
 [tool.black]
 target-version = ['py311']

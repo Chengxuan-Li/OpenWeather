@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     }
     
     # Application settings
+    app_name: str = Field(default="OpenWeather", env="APP_NAME")
+    app_version: str = Field(default="0.1.0", env="APP_VERSION")
     debug: bool = Field(default=False, env="DEBUG")
     host: str = Field(default="0.0.0.0", env="HOST")
     port: int = Field(default=8080, env="PORT")

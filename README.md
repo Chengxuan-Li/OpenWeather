@@ -180,6 +180,60 @@ black --check .
 mypy openweather/
 ```
 
+## 🚀 Deployment
+
+### GitHub Actions
+
+The repository includes GitHub Actions workflows for:
+- **CI**: Automated testing and linting on pull requests
+- **Deploy**: Automated deployment preparation
+
+### Deploy to Render
+
+1. **Fork this repository** to your GitHub account
+2. **Create a Render account** at [render.com](https://render.com)
+3. **Create a new Web Service**:
+   - Connect your GitHub repository
+   - Set build command: `pip install -e .`
+   - Set start command: `uvicorn openweather.main:app --host 0.0.0.0 --port $PORT`
+   - Set environment variable: `PORT=10000`
+
+### Deploy to Railway
+
+1. **Fork this repository** to your GitHub account
+2. **Create a Railway account** at [railway.app](https://railway.app)
+3. **Deploy from GitHub**:
+   - Connect your repository
+   - Railway will auto-detect the Python app
+   - Set environment variables as needed
+
+### Deploy to Heroku
+
+1. **Create a `Procfile`**:
+   ```
+   web: uvicorn openweather.main:app --host 0.0.0.0 --port $PORT
+   ```
+
+2. **Deploy using Heroku CLI**:
+   ```bash
+   heroku create your-app-name
+   git push heroku main
+   ```
+
+### Environment Variables for Production
+
+```bash
+# Required for production
+HOST=0.0.0.0
+PORT=8080
+DEBUG=false
+
+# Optional
+LOG_LEVEL=INFO
+OUTPUTS_DIR=outputs
+SECRET_KEY=your-secret-key-here
+```
+
 ## 🐳 Docker
 
 ### Production Build
