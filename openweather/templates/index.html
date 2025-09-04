@@ -371,7 +371,7 @@ function deriveLocationFromMap() {
     const lat = parseFloat(coords[1]);
     
     // Use Nominatim for reverse geocoding
-    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&accept-language=en`)
         .then(response => response.json())
         .then(data => {
             // Always override existing values with derived location data
@@ -380,9 +380,15 @@ function deriveLocationFromMap() {
             const countryInput = document.getElementById('country');
             
             if (data.address) {
-                locationInput.value = data.address.city || data.address.town || data.address.village || data.address.county || 'Unknown Location';
-                stateInput.value = data.address.state || data.address.province || data.address.region || 'Unknown State';
-                countryInput.value = data.address.country || 'Planet Earth';
+                // Use English names and sanitize for file system compatibility
+                const location = data.address.city || data.address.town || data.address.village || data.address.county || 'Unknown Location';
+                const state = data.address.state || data.address.province || data.address.region || 'Unknown State';
+                const country = data.address.country || 'Planet Earth';
+                
+                // Sanitize names to remove non-ASCII characters
+                locationInput.value = sanitizeLocationName(location);
+                stateInput.value = sanitizeLocationName(state);
+                countryInput.value = sanitizeLocationName(country);
             } else {
                 // Fill with default values if no address data
                 locationInput.value = 'Unknown Location';
@@ -401,6 +407,25 @@ function deriveLocationFromMap() {
             stateInput.value = 'Unknown State';
             countryInput.value = 'Planet Earth';
         });
+}
+
+// Function to sanitize location names for file system compatibility
+function sanitizeLocationName(name) {
+    if (!name) return 'Unknown';
+    
+    // Remove non-ASCII characters and replace with ASCII equivalents or remove
+    let sanitized = name.replace(/[^\x00-\x7F]/g, '');
+    
+    // Replace multiple spaces with single space
+    sanitized = sanitized.replace(/\s+/g, ' ');
+    
+    // Remove leading/trailing spaces
+    sanitized = sanitized.trim();
+    
+    // If empty after sanitization, use default
+    if (!sanitized) return 'Unknown';
+    
+    return sanitized;
 }
 
 // Single derive from map button event listener

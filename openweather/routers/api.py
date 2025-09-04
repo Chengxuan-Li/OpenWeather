@@ -3,6 +3,7 @@
 import logging
 from typing import List, Optional
 from pathlib import Path
+import os
 
 from fastapi import APIRouter, HTTPException, status, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
@@ -207,9 +208,42 @@ async def api_get_datasets():
 async def download_file(file_path: str):
     """Download a specific file from the outputs directory."""
     try:
-        # Security check: ensure file is within outputs directory
-        full_path = settings.outputs_dir / file_path
-        if not full_path.resolve().is_relative_to(settings.outputs_dir.resolve()):
+        # For server deployment, files are in outputs directory
+        if os.environ.get('RENDER') or os.environ.get('RAILWAY') or os.environ.get('HEROKU'):
+            # Server environment - look in outputs directory
+            full_path = settings.outputs_dir / file_path
+        else:
+            # Local environment - try multiple possible locations
+            possible_paths = [
+                settings.outputs_dir / file_path,
+                Path.home() / "Downloads" / "OpenWeather" / file_path,
+                Path.cwd() / "OpenWeather" / file_path
+            ]
+            
+            # Find the first existing path
+            full_path = None
+            for path in possible_paths:
+                if path.exists():
+                    full_path = path
+                    break
+            
+            if not full_path:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="File not found"
+                )
+        
+        # Security check: ensure file is within allowed directories
+        allowed_dirs = [
+            settings.outputs_dir.resolve(),
+            (Path.home() / "Downloads" / "OpenWeather").resolve(),
+            (Path.cwd() / "OpenWeather").resolve()
+        ]
+        
+        file_resolved = full_path.resolve()
+        is_allowed = any(file_resolved.is_relative_to(allowed_dir) for allowed_dir in allowed_dirs)
+        
+        if not is_allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied"

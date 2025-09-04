@@ -1,183 +1,150 @@
-"""UI router for web interface and form handling."""
+"""UI router for web interface."""
 
 import logging
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
-from urllib.parse import urlencode
+from typing import Optional, Dict, Any
+import os
 
-from fastapi import APIRouter, Request, Form, Query, HTTPException, status
+from fastapi import APIRouter, Request, HTTPException, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
 
 from ..config import settings
 from ..services.nsrdb_wrapper import NSRDBWrapper
-from ..services.storage import StorageService
-from ..services.geometry import validate_wkt, create_point_wkt, parse_lat_lon_string
+from ..services.storage import StorageService, sanitize_location_name
+from ..services.progress import progress_manager
 
 # Initialize services
 storage_service = StorageService(settings.outputs_dir)
 nsrdb_wrapper = NSRDBWrapper(storage_service)
 
-# Initialize templates
-templates = Jinja2Templates(directory=str(settings.templates_dir))
-
 # Initialize router
 router = APIRouter()
 
+# Templates
+templates = Jinja2Templates(directory=settings.templates_dir)
 
-class JobRequest(BaseModel):
-    """Job request model."""
-    wkt: str
-    dataset: str
-    interval: str
-    years: str  # Comma-separated years
-    api_key: str
-    email: str
-    location: Optional[str] = "Unknown"
-    state: Optional[str] = "Unknown"
-    country: Optional[str] = "Unknown"
-    convert_to_epw: bool = True
+
+def get_storage_service() -> StorageService:
+    """Dependency to get storage service."""
+    return storage_service
+
+
+def extract_download_path(file_path: str) -> str:
+    """Extract the correct download path for a file."""
+    # For server deployment, files are in outputs directory
+    if os.environ.get('RENDER') or os.environ.get('RAILWAY') or os.environ.get('HEROKU'):
+        # Server environment - use job_name/filename format
+        path_parts = Path(file_path).parts
+        if len(path_parts) >= 2:
+            return f"{path_parts[-2]}/{path_parts[-1]}"
+        else:
+            return path_parts[-1] if path_parts else ""
+    else:
+        # Local environment - use the original path format
+        path_parts = Path(file_path).parts
+        if len(path_parts) >= 2:
+            return f"{path_parts[-2]}/{path_parts[-1]}"
+        else:
+            return path_parts[-1] if path_parts else ""
 
 
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    """Main page with form and map."""
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "datasets": settings.dataset_names,
-            "dataset_intervals": settings.dataset_intervals,
-            "dataset_years": settings.dataset_years,
-        }
-    )
+    """Main page with form."""
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "datasets": settings.dataset_names,
+        "dataset_intervals": settings.dataset_intervals,
+        "dataset_years": settings.dataset_years,
+    })
 
 
 @router.get("/q", response_class=HTMLResponse)
 async def query_interface(
     request: Request,
-    wkt: Optional[str] = Query(None),
-    dataset: Optional[str] = Query(None),
-    interval: Optional[str] = Query(None),
-    years: Optional[str] = Query(None),
-    api_key: Optional[str] = Query(None),
-    email: Optional[str] = Query(None),
-    location: Optional[str] = Query(None),
-    state: Optional[str] = Query(None),
-    country: Optional[str] = Query(None),
-    as_epw: Optional[bool] = Query(False),
+    wkt: Optional[str] = None,
+    dataset: Optional[str] = None,
+    interval: Optional[str] = None,
+    years: Optional[str] = None,
+    api_key: Optional[str] = None,
+    email: Optional[str] = None,
+    location: Optional[str] = None,
+    state: Optional[str] = None,
+    country: Optional[str] = None,
+    convert_to_epw: Optional[str] = None,
+    download_folder: Optional[str] = None,
 ):
-    """
-    Query interface that accepts URL parameters.
+    """Query interface - pre-fill form or run job."""
     
-    If all required parameters are present, runs the job.
-    If partial parameters are present, pre-fills the form.
-    """
-    # Check if we have all required parameters to run a job
-    required_params = [wkt, dataset, interval, years, api_key, email]
-    has_all_params = all(param is not None and param.strip() for param in required_params)
+    # Pre-fill form with query parameters
+    form_data = {
+        "wkt": wkt or "",
+        "dataset": dataset or "",
+        "interval": interval or "",
+        "years": years or "",
+        "api_key": api_key or "",
+        "email": email or "",
+        "location": location or "",
+        "state": state or "",
+        "country": country or "",
+        "convert_to_epw": convert_to_epw == "true",
+        "download_folder": download_folder or "Downloads/OpenWeather",
+    }
     
-    if has_all_params:
-        # Run the job
+    # If all required parameters are present, run the job
+    required_params = ["wkt", "dataset", "interval", "years", "api_key", "email"]
+    if all(form_data.get(param) for param in required_params):
         try:
-            # Parse years
-            year_list = [y.strip() for y in years.split(",") if y.strip()]
+            # Parse years string to list
+            years_list = [y.strip() for y in form_data["years"].split(",")]
             
-            # Run NSRDB job
             result = nsrdb_wrapper.run_nsrdb_job(
-                wkt=wkt,
-                dataset=dataset,
-                interval=interval,
-                years=year_list,
-                api_key=api_key,
-                email=email,
-                location=location or "Unknown",
-                state=state or "Unknown",
-                country=country or "Unknown",
-                convert_to_epw=as_epw,
+                wkt=form_data["wkt"],
+                dataset=form_data["dataset"],
+                interval=form_data["interval"],
+                years=years_list,
+                api_key=form_data["api_key"],
+                email=form_data["email"],
+                location=form_data["location"],
+                state=form_data["state"],
+                country=form_data["country"],
+                convert_to_epw=form_data["convert_to_epw"],
+                download_folder=form_data["download_folder"],
             )
             
             if result["success"]:
-                return templates.TemplateResponse(
-                    "results.html",
-                    {
-                        "request": request,
-                        "result": result,
-                        "job_summary": result.get("summary", {}),
-                    }
-                )
+                return RedirectResponse(url=f"/results/{result['job_id']}", status_code=302)
             else:
-                return templates.TemplateResponse(
-                    "error.html",
-                    {
-                        "request": request,
-                        "errors": result.get("errors", ["Unknown error"]),
-                        "datasets": settings.dataset_names,
-                        "dataset_intervals": settings.dataset_intervals,
-                        "dataset_years": settings.dataset_years,
-                        "form_data": {
-                            "wkt": wkt,
-                            "dataset": dataset,
-                            "interval": interval,
-                            "years": years,
-                            "api_key": api_key,
-                            "email": email,
-                            "location": location,
-                            "state": state,
-                            "country": country,
-                            "convert_to_epw": as_epw,
-                        }
-                    }
-                )
-                
-        except Exception as e:
-            logging.error(f"Error running job: {e}")
-            return templates.TemplateResponse(
-                "error.html",
-                {
+                return templates.TemplateResponse("error.html", {
                     "request": request,
-                    "errors": [str(e)],
+                    "error": "Job failed",
+                    "details": result.get("errors", ["Unknown error"]),
                     "datasets": settings.dataset_names,
                     "dataset_intervals": settings.dataset_intervals,
                     "dataset_years": settings.dataset_years,
-                    "form_data": {
-                        "wkt": wkt,
-                        "dataset": dataset,
-                        "interval": interval,
-                        "years": years,
-                        "api_key": api_key,
-                        "email": email,
-                        "location": location,
-                        "state": state,
-                        "country": country,
-                        "convert_to_epw": as_epw,
-                    }
-                }
-            )
+                })
+                
+        except Exception as e:
+            logging.error(f"Query interface error: {e}")
+            return templates.TemplateResponse("error.html", {
+                "request": request,
+                "error": "An error occurred",
+                "details": [str(e)],
+                "datasets": settings.dataset_names,
+                "dataset_intervals": settings.dataset_intervals,
+                "dataset_years": settings.dataset_years,
+            })
     
-    # Pre-fill form with provided parameters
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "datasets": settings.dataset_names,
-            "dataset_intervals": settings.dataset_intervals,
-            "dataset_years": settings.dataset_years,
-            "form_data": {
-                "wkt": wkt or "",
-                "dataset": dataset or "",
-                "interval": interval or "",
-                "years": years or "",
-                "api_key": api_key or "",
-                "email": email or "",
-                "location": location or "",
-                "state": state or "",
-                "country": country or "",
-                "convert_to_epw": as_epw,
-            }
-        }
-    )
+    # Otherwise, show form with pre-filled values
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "form_data": form_data,
+        "datasets": settings.dataset_names,
+        "dataset_intervals": settings.dataset_intervals,
+        "dataset_years": settings.dataset_years,
+    })
 
 
 @router.post("/run")
@@ -186,81 +153,56 @@ async def run_job(
     wkt: str = Form(...),
     dataset: str = Form(...),
     interval: str = Form(...),
-    years: list = Form(...),
+    years: str = Form(...),
     api_key: str = Form(...),
     email: str = Form(...),
-    location: str = Form("Unknown"),
-    state: str = Form("Unknown"),
-    country: str = Form("Unknown"),
+    location: str = Form(""),
+    state: str = Form(""),
+    country: str = Form(""),
     convert_to_epw: bool = Form(True),
     download_folder: str = Form("Downloads/OpenWeather"),
+    storage_service: StorageService = Depends(get_storage_service),
 ):
-    """Handle form submission and run NSRDB job."""
+    """Run NSRDB job and return results."""
     try:
-        # Parse years (handle both list and comma-separated string)
-        if isinstance(years, list):
-            year_list = [y.strip() for y in years if y.strip()]
-        else:
-            year_list = [y.strip() for y in years.split(",") if y.strip()]
+        # Parse years string to list
+        years_list = [y.strip() for y in years.split(",")]
         
-        # Run the NSRDB job asynchronously
-        import asyncio
-        import threading
-        from datetime import datetime
+        # Sanitize location names
+        safe_location = sanitize_location_name(location)
+        safe_state = sanitize_location_name(state)
+        safe_country = sanitize_location_name(country)
         
-        def run_job_async():
-            try:
-                result = nsrdb_wrapper.run_nsrdb_job(
-                    wkt=wkt,
-                    dataset=dataset,
-                    interval=interval,
-                    years=year_list,
-                    api_key=api_key,
-                    email=email,
-                    location=location,
-                    state=state,
-                    country=country,
-                    convert_to_epw=convert_to_epw,
-                    download_folder=download_folder,
-                )
-                logging.info(f"Job completed: {result}")
-            except Exception as e:
-                logging.error(f"Job failed: {e}")
+        # Create job directory
+        job_dir = storage_service.create_job_directory(
+            wkt=wkt,
+            dataset=dataset,
+            years=years_list,
+            location=safe_location,
+            state=safe_state,
+            country=safe_country,
+            download_folder=download_folder,
+        )
         
-        # Start job in background thread
-        thread = threading.Thread(target=run_job_async)
-        thread.daemon = True
-        thread.start()
+        # Run the job in background
+        result = nsrdb_wrapper.run_nsrdb_job(
+            wkt=wkt,
+            dataset=dataset,
+            interval=interval,
+            years=years_list,
+            api_key=api_key,
+            email=email,
+            location=safe_location,
+            state=safe_state,
+            country=safe_country,
+            convert_to_epw=convert_to_epw,
+            download_folder=download_folder,
+        )
         
-        # Return immediately with job info
-        try:
-            job_dir = nsrdb_wrapper.storage.create_job_directory(wkt, dataset, year_list, location, state, country, download_folder)
-            logging.info(f"Created job directory: {job_dir}")
-        except Exception as e:
-            logging.error(f"Error creating job directory: {e}")
-            return {
-                "success": False,
-                "errors": [f"Error creating job directory: {str(e)}"]
-            }
-        result = {
-            "success": True,
-            "job_id": job_dir.name,
-            "job_dir": str(job_dir),
-            "files": {"csv": [], "epw": []},
-            "logs": ["Job started in background"],
-            "summary": {
-                "job_name": job_dir.name,
-                "total_files": 0,
-                "total_size_formatted": "N/A",
-                "created": datetime.now().isoformat()
-            }
-        }
-        
-        # Return JSON response with job ID for progress tracking
         return result
         
     except Exception as e:
-        logging.error(f"Error running job: {e}")
+        logging.error(f"Run job error: {e}")
         return {
             "success": False,
             "errors": [str(e)]
@@ -272,141 +214,65 @@ async def view_results(request: Request, job_id: str):
     """View results for a specific job."""
     try:
         # Try to find the job directory in multiple locations
-        possible_locations = [
-            settings.outputs_dir / job_id,  # Original outputs directory
-            Path.home() / "Downloads" / "OpenWeather" / job_id,  # Default downloads location
-            Path.cwd() / "OpenWeather" / job_id,  # Custom folder in current directory
+        possible_dirs = [
+            settings.outputs_dir / job_id,
+            Path.home() / "Downloads" / "OpenWeather" / job_id,
+            Path.cwd() / "OpenWeather" / job_id,
         ]
         
         job_dir = None
-        for location in possible_locations:
-            if location.exists():
-                job_dir = location
+        for dir_path in possible_dirs:
+            if dir_path.exists():
+                job_dir = dir_path
                 break
-        
-        if not job_dir:
-            # If not found in standard locations, try to find it in any Downloads subdirectory
-            downloads_path = Path.home() / "Downloads"
-            for subdir in downloads_path.rglob(job_id):
-                if subdir.is_dir():
-                    job_dir = subdir
-                    break
-            
-            # Also check current working directory and its subdirectories
-            if not job_dir:
-                for subdir in Path.cwd().rglob(job_id):
-                    if subdir.is_dir():
-                        job_dir = subdir
-                        break
         
         if not job_dir:
             raise HTTPException(status_code=404, detail="Job not found")
         
-        # Get files from job directory
-        csv_files = list(job_dir.glob("*.csv"))
-        epw_files = list(job_dir.glob("*.epw"))
+        # Get job summary
+        summary = storage_service.get_job_summary(job_dir)
         
-        from datetime import datetime
+        # Prepare file paths for download
+        if summary.get("files"):
+            for file_info in summary["files"]:
+                file_path = job_dir / file_info["name"]
+                file_info["download_path"] = extract_download_path(str(file_path))
         
-        result = {
-            "success": True,
-            "job_id": job_id,
-            "job_dir": str(job_dir),
-            "files": {
-                "csv": [str(f) for f in csv_files],
-                "epw": [str(f) for f in epw_files]
-            },
-            "summary": {
-                "job_name": job_id,
-                "total_files": len(csv_files) + len(epw_files),
-                "total_size_formatted": "N/A",
-                "created": datetime.fromtimestamp(job_dir.stat().st_ctime).isoformat()
+        return templates.TemplateResponse("results.html", {
+            "request": request,
+            "result": {
+                "success": True,
+                "job_id": job_id,
+                "job_dir": str(job_dir),
+                "summary": summary,
+                "files": {
+                    "csv": [str(job_dir / f["name"]) for f in summary.get("files", []) if f["type"] == ".csv"],
+                    "epw": [str(job_dir / f["name"]) for f in summary.get("files", []) if f["type"] == ".epw"],
+                },
+                "logs": summary.get("logs", []),
             }
-        }
-        
-        return templates.TemplateResponse(
-            "results.html",
-            {
-                "request": request,
-                "result": result,
-                "job_summary": result.get("summary", {}),
-            }
-        )
+        })
         
     except Exception as e:
-        logging.error(f"Error viewing results: {e}")
-        return templates.TemplateResponse(
-            "error.html",
-            {
-                "request": request,
-                "errors": [str(e)],
-                "datasets": settings.dataset_names,
-                "dataset_intervals": settings.dataset_intervals,
-                "dataset_years": settings.dataset_years,
-            }
-        )
-            
-    except Exception as e:
-        logging.error(f"Error running job: {e}")
-        return templates.TemplateResponse(
-            "error.html",
-            {
-                "request": request,
-                "errors": [str(e)],
-                "datasets": settings.dataset_names,
-                "dataset_intervals": settings.dataset_intervals,
-                "dataset_years": settings.dataset_years,
-                "form_data": {
-                    "wkt": wkt,
-                    "dataset": dataset,
-                    "interval": interval,
-                    "years": ",".join(years) if isinstance(years, list) else years,
-                    "api_key": api_key,
-                    "email": email,
-                    "location": location,
-                    "state": state,
-                    "country": country,
-                    "convert_to_epw": convert_to_epw,
-                }
-            }
-        )
+        logging.error(f"View results error: {e}")
+        return templates.TemplateResponse("error.html", {
+            "request": request,
+            "error": "Error loading results",
+            "details": [str(e)],
+            "datasets": settings.dataset_names,
+            "dataset_intervals": settings.dataset_intervals,
+            "dataset_years": settings.dataset_years,
+        })
 
 
-@router.get("/wkt-from-point")
-async def wkt_from_point(
-    lat: float = Query(...),
-    lon: float = Query(...),
-    buffer: Optional[float] = Query(1.0),
-):
-    """Generate WKT from lat/lon point with optional buffer."""
-    try:
-        from ..services.geometry import wkt_from_point_with_buffer
-        
-        if buffer and buffer > 0:
-            wkt = wkt_from_point_with_buffer(lat, lon, buffer)
-        else:
-            wkt = create_point_wkt(lat, lon)
-        
-        return {"wkt": wkt, "lat": lat, "lon": lon, "buffer": buffer}
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error generating WKT: {str(e)}"
-        )
-
-
-@router.get("/validate-wkt")
-async def validate_wkt_endpoint(wkt: str = Query(...)):
-    """Validate WKT string."""
-    is_valid = validate_wkt(wkt)
-    return {"valid": is_valid, "wkt": wkt}
-
-
-@router.get("/datasets")
-async def get_datasets():
-    """Get available datasets and their configurations."""
-    return {
+@router.get("/error", response_class=HTMLResponse)
+async def error_page(request: Request, error: str = "An error occurred", details: str = ""):
+    """Error page."""
+    return templates.TemplateResponse("error.html", {
+        "request": request,
+        "error": error,
+        "details": [details] if details else [],
         "datasets": settings.dataset_names,
-        "intervals": settings.dataset_intervals,
-        "years": settings.dataset_years,
-    }
+        "dataset_intervals": settings.dataset_intervals,
+        "dataset_years": settings.dataset_years,
+    })

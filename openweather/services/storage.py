@@ -1,12 +1,35 @@
 """Storage utilities for managing output files."""
 
 import os
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
 from .geometry import parse_point_from_wkt
+
+
+def sanitize_location_name(name: str) -> str:
+    """Sanitize location name to use only ASCII characters for file system compatibility."""
+    if not name:
+        return "Unknown"
+    
+    # Remove or replace non-ASCII characters
+    # Keep only letters, numbers, spaces, and common punctuation
+    sanitized = re.sub(r'[^\x00-\x7F]+', '', name)
+    
+    # Replace multiple spaces with single space
+    sanitized = re.sub(r'\s+', ' ', sanitized)
+    
+    # Remove leading/trailing spaces
+    sanitized = sanitized.strip()
+    
+    # If empty after sanitization, use default
+    if not sanitized:
+        return "Unknown"
+    
+    return sanitized
 
 
 class StorageService:
@@ -21,21 +44,31 @@ class StorageService:
         # Create timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        # Create job name: Location_State_Country_YYYYMMDDHHMMSS
-        job_name = f"{location}_{state}_{country}_{timestamp}"
+        # Sanitize location names to ensure ASCII-only characters
+        safe_location = sanitize_location_name(location)
+        safe_state = sanitize_location_name(state)
+        safe_country = sanitize_location_name(country)
         
-        # Create the full path
-        if download_folder.startswith("Downloads/"):
-            # Use user's downloads folder
-            downloads_path = Path.home() / "Downloads"
-            full_path = downloads_path / download_folder.replace("Downloads/", "") / job_name
+        # Create job name: Location_State_Country_YYYYMMDDHHMMSS
+        job_name = f"{safe_location}_{safe_state}_{safe_country}_{timestamp}"
+        
+        # For server deployment, always use the outputs directory
+        if os.environ.get('RENDER') or os.environ.get('RAILWAY') or os.environ.get('HEROKU'):
+            # Server environment - use outputs directory
+            full_path = self.base_output_dir / job_name
         else:
-            # Use custom folder - ensure it's an absolute path
-            if Path(download_folder).is_absolute():
-                full_path = Path(download_folder) / job_name
+            # Local environment - use user's downloads folder
+            if download_folder.startswith("Downloads/"):
+                # Use user's downloads folder
+                downloads_path = Path.home() / "Downloads"
+                full_path = downloads_path / download_folder.replace("Downloads/", "") / job_name
             else:
-                # If relative path, make it relative to current working directory
-                full_path = Path.cwd() / download_folder / job_name
+                # Use custom folder - ensure it's an absolute path
+                if Path(download_folder).is_absolute():
+                    full_path = Path(download_folder) / job_name
+                else:
+                    # If relative path, make it relative to current working directory
+                    full_path = Path.cwd() / download_folder / job_name
         
         # Create all necessary directories
         full_path.mkdir(parents=True, exist_ok=True)
