@@ -31,6 +31,25 @@ def get_storage_service() -> StorageService:
     return storage_service
 
 
+def get_secret_api_key() -> Optional[str]:
+    """Get API key from Render secret file."""
+    try:
+        # Try to read from Render secrets
+        secret_path = Path("/etc/secrets/api.txt")
+        if secret_path.exists():
+            return secret_path.read_text().strip()
+        
+        # Fallback to local development
+        local_secret_path = Path("api.txt")
+        if local_secret_path.exists():
+            return local_secret_path.read_text().strip()
+        
+        return None
+    except Exception as e:
+        logging.error(f"Error reading secret API key: {e}")
+        return None
+
+
 def extract_download_path(file_path: str) -> str:
     """Extract the correct download path for a file."""
     # For server deployment, files are in outputs directory
@@ -74,7 +93,6 @@ async def query_interface(
     state: Optional[str] = None,
     country: Optional[str] = None,
     convert_to_epw: Optional[str] = None,
-    download_folder: Optional[str] = None,
 ):
     """Query interface - pre-fill form or run job."""
     
@@ -90,7 +108,6 @@ async def query_interface(
         "state": state or "",
         "country": country or "",
         "convert_to_epw": convert_to_epw == "true",
-        "download_folder": download_folder or "Downloads/OpenWeather",
     }
     
     # If all required parameters are present, run the job
@@ -100,18 +117,33 @@ async def query_interface(
             # Parse years string to list
             years_list = [y.strip() for y in form_data["years"].split(",")]
             
+            # Handle secret API key
+            api_key = form_data["api_key"]
+            if api_key.lower() == "eslab":
+                secret_key = get_secret_api_key()
+                if secret_key:
+                    api_key = secret_key
+                else:
+                    return templates.TemplateResponse("error.html", {
+                        "request": request,
+                        "error": "Secret API key not found",
+                        "details": ["Please check your configuration."],
+                        "datasets": settings.dataset_names,
+                        "dataset_intervals": settings.dataset_intervals,
+                        "dataset_years": settings.dataset_years,
+                    })
+            
             result = nsrdb_wrapper.run_nsrdb_job(
                 wkt=form_data["wkt"],
                 dataset=form_data["dataset"],
                 interval=form_data["interval"],
                 years=years_list,
-                api_key=form_data["api_key"],
+                api_key=api_key,
                 email=form_data["email"],
                 location=form_data["location"],
                 state=form_data["state"],
                 country=form_data["country"],
                 convert_to_epw=form_data["convert_to_epw"],
-                download_folder=form_data["download_folder"],
             )
             
             if result["success"]:
@@ -160,7 +192,6 @@ async def run_job(
     state: str = Form(""),
     country: str = Form(""),
     convert_to_epw: bool = Form(True),
-    download_folder: str = Form("Downloads/OpenWeather"),
     storage_service: StorageService = Depends(get_storage_service),
 ):
     """Run NSRDB job and return results."""
@@ -173,6 +204,17 @@ async def run_job(
         safe_state = sanitize_location_name(state)
         safe_country = sanitize_location_name(country)
         
+        # Handle secret API key
+        if api_key.lower() == "eslab":
+            secret_key = get_secret_api_key()
+            if secret_key:
+                api_key = secret_key
+            else:
+                return {
+                    "success": False,
+                    "errors": ["Secret API key not found. Please check your configuration."]
+                }
+        
         # Create job directory
         job_dir = storage_service.create_job_directory(
             wkt=wkt,
@@ -181,7 +223,6 @@ async def run_job(
             location=safe_location,
             state=safe_state,
             country=safe_country,
-            download_folder=download_folder,
         )
         
         # Run the job in background
@@ -196,7 +237,6 @@ async def run_job(
             state=safe_state,
             country=safe_country,
             convert_to_epw=convert_to_epw,
-            download_folder=download_folder,
         )
         
         return result

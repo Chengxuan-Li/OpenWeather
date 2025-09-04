@@ -1,9 +1,11 @@
 """API router for JSON endpoints."""
 
 import logging
+import os
+import zipfile
+import tempfile
 from typing import List, Optional
 from pathlib import Path
-import os
 
 from fastapi import APIRouter, HTTPException, status, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
@@ -57,6 +59,25 @@ class WKTRequest(BaseModel):
     buffer: Optional[float] = 1.0
 
 
+def get_secret_api_key() -> Optional[str]:
+    """Get API key from Render secret file."""
+    try:
+        # Try to read from Render secrets
+        secret_path = Path("/etc/secrets/api.txt")
+        if secret_path.exists():
+            return secret_path.read_text().strip()
+        
+        # Fallback to local development
+        local_secret_path = Path("api.txt")
+        if local_secret_path.exists():
+            return local_secret_path.read_text().strip()
+        
+        return None
+    except Exception as e:
+        logging.error(f"Error reading secret API key: {e}")
+        return None
+
+
 @router.post("/download", response_model=JobResponse)
 async def api_download(request: JobRequest):
     """
@@ -69,12 +90,24 @@ async def api_download(request: JobRequest):
     - Returns file paths and logs
     """
     try:
+        # Handle secret API key
+        api_key = request.api_key
+        if api_key.lower() == "eslab":
+            secret_key = get_secret_api_key()
+            if secret_key:
+                api_key = secret_key
+            else:
+                return JobResponse(
+                    success=False,
+                    errors=["Secret API key not found. Please check your configuration."]
+                )
+        
         result = nsrdb_wrapper.run_nsrdb_job(
             wkt=request.wkt,
             dataset=request.dataset,
             interval=request.interval,
             years=request.years,
-            api_key=request.api_key,
+            api_key=api_key,
             email=request.email,
             location=request.location,
             state=request.state,
@@ -99,8 +132,6 @@ async def get_progress(job_id: str):
     Returns current progress as JSON.
     """
     progress = progress_manager.get_progress(job_id)
-    if progress is None:
-        raise HTTPException(status_code=404, detail="Job not found")
     return progress
 
 
@@ -157,11 +188,7 @@ async def api_convert_to_epw(
 
 
 @router.get("/wkt-from-point")
-async def api_wkt_from_point(
-    lat: float,
-    lon: float,
-    buffer: Optional[float] = 1.0,
-):
+async def api_wkt_from_point(lat: float, lon: float, buffer: Optional[float] = 1.0):
     """Generate WKT from lat/lon point with optional buffer."""
     try:
         from ..services.geometry import wkt_from_point_with_buffer
@@ -266,6 +293,52 @@ async def download_file(file_path: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Download failed: {str(e)}"
+        )
+
+
+@router.get("/download-zip/{job_id}")
+async def download_zip(job_id: str):
+    """Download all files from a job as a zip file."""
+    try:
+        # Try to find the job directory in multiple locations
+        possible_dirs = [
+            settings.outputs_dir / job_id,
+            Path.home() / "Downloads" / "OpenWeather" / job_id,
+            Path.cwd() / "OpenWeather" / job_id,
+        ]
+        
+        job_dir = None
+        for dir_path in possible_dirs:
+            if dir_path.exists():
+                job_dir = dir_path
+                break
+        
+        if not job_dir:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Job not found"
+            )
+        
+        # Create a temporary zip file
+        with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp_file:
+            with zipfile.ZipFile(tmp_file.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                # Add all files from the job directory
+                for file_path in job_dir.iterdir():
+                    if file_path.is_file():
+                        zipf.write(file_path, file_path.name)
+            
+            # Return the zip file
+            return FileResponse(
+                tmp_file.name,
+                media_type="application/zip",
+                filename=f"{job_id}.zip"
+            )
+        
+    except Exception as e:
+        logging.error(f"Zip download failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Zip download failed: {str(e)}"
         )
 
 

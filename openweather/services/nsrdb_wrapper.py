@@ -98,7 +98,6 @@ class NSRDBWrapper:
         state: str = "Unknown",
         country: str = "Unknown",
         convert_to_epw: bool = True,
-        download_folder: str = "Downloads/OpenWeather",
     ) -> Dict[str, Any]:
         """
         Run NSRDB job and return results.
@@ -121,7 +120,7 @@ class NSRDBWrapper:
                 }
             
             # Create job directory
-            job_dir = self.storage.create_job_directory(wkt, dataset, years, location, state, country, download_folder)
+            job_dir = self.storage.create_job_directory(wkt, dataset, years, location, state, country)
             job_id = job_dir.name  # Use directory name as job ID for progress tracking
             
             # Initialize progress tracking - use unique years count

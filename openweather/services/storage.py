@@ -39,7 +39,7 @@ class StorageService:
         self.base_output_dir = Path(base_output_dir)
         self.base_output_dir.mkdir(exist_ok=True)
     
-    def create_job_directory(self, wkt: str, dataset: str, years: List[str], location: str = "Unknown Location", state: str = "Unknown State", country: str = "Planet Earth", download_folder: str = "Downloads/OpenWeather") -> Path:
+    def create_job_directory(self, wkt: str, dataset: str, years: List[str], location: str = "Unknown Location", state: str = "Unknown State", country: str = "Planet Earth") -> Path:
         """Create a unique directory for a job."""
         # Create timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -58,17 +58,8 @@ class StorageService:
             full_path = self.base_output_dir / job_name
         else:
             # Local environment - use user's downloads folder
-            if download_folder.startswith("Downloads/"):
-                # Use user's downloads folder
-                downloads_path = Path.home() / "Downloads"
-                full_path = downloads_path / download_folder.replace("Downloads/", "") / job_name
-            else:
-                # Use custom folder - ensure it's an absolute path
-                if Path(download_folder).is_absolute():
-                    full_path = Path(download_folder) / job_name
-                else:
-                    # If relative path, make it relative to current working directory
-                    full_path = Path.cwd() / download_folder / job_name
+            downloads_path = Path.home() / "Downloads"
+            full_path = downloads_path / "OpenWeather" / job_name
         
         # Create all necessary directories
         full_path.mkdir(parents=True, exist_ok=True)
