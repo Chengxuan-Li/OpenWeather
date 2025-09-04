@@ -31,7 +31,7 @@
                 <select id="dataset" name="dataset" class="form-select" required>
                     <option value="">Select a dataset...</option>
                     {% for key, value in datasets.items() %}
-                    <option value="{{ value }}" {% if form_data and form_data.dataset == value %}selected{% endif %}>
+                    <option value="{{ value }}" {% if (form_data and form_data.dataset == value) or (not form_data and key == 'aggregated') %}selected{% endif %}>
                         {{ key|title }} ({{ value }})
                     </option>
                     {% endfor %}
@@ -644,6 +644,10 @@ document.getElementById('dataset').addEventListener('change', function() {
             let option = document.createElement('option');
             option.value = interval;
             option.textContent = interval + ' minutes';
+            // Set 60 as default for aggregated dataset
+            if (datasetKey === 'aggregated' && interval === '60') {
+                option.selected = true;
+            }
             intervalSelect.appendChild(option);
         });
     }
