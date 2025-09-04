@@ -1,5 +1,15 @@
-# Output files
+# Output files and generated content
 outputs/
+outputs/*
+*.csv
+*.epw
+*.xlsx
+*.xls
+*.json
+*.zip
+*.tar.gz
+*.tar
+*.gz
 
 # Python
 __pycache__/
@@ -151,9 +161,6 @@ Desktop.ini
 # Temporary files
 *.tmp
 *.temp
-*.swp
-*.swo
-*~
 
 # Logs
 *.log
@@ -167,5 +174,86 @@ logs/
 # API keys and secrets
 .env.local
 .env.production
+.env.development
+.env.test
 secrets.json
 config.json
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Data files and downloads
+data/
+downloads/
+temp/
+tmp/
+cache/
+*.dat
+*.bin
+*.h5
+*.hdf5
+*.nc
+*.netcdf
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+.classpath
+.metadata/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+*.saved
+
+# Compressed files
+*.7z
+*.rar
+*.bz2
+*.xz
+
+# Large media files
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+*.mp3
+*.wav
+*.flac
+*.aac
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.svg
+*.ico
+
+# Documentation builds
+docs/_build/
+site/
+_site/
