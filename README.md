@@ -182,6 +182,14 @@ mypy openweather/
 
 ## 🚀 Deployment
 
+### Build Optimization
+
+The project is optimized for fast deployment:
+- **Fixed versions** in `requirements.txt` for faster dependency resolution
+- **render.yaml** for automatic Render deployment configuration
+- **setup.py** as fallback for platforms that don't handle `pyproject.toml` well
+- **No editable installs** during deployment (uses `pip install -r requirements.txt`)
+
 ### GitHub Actions
 
 The repository includes GitHub Actions workflows for:
@@ -192,9 +200,15 @@ The repository includes GitHub Actions workflows for:
 
 1. **Fork this repository** to your GitHub account
 2. **Create a Render account** at [render.com](https://render.com)
-3. **Create a new Web Service**:
+3. **Deploy using render.yaml** (Recommended):
+   - The repository includes a `render.yaml` file for automatic deployment
+   - Render will automatically detect and use this configuration
+   - Build command: `pip install -r requirements.txt` (faster than editable installs)
+   - Start command: `uvicorn openweather.main:app --host 0.0.0.0 --port $PORT`
+
+4. **Manual deployment** (Alternative):
    - Connect your GitHub repository
-   - Set build command: `pip install -e .`
+   - Set build command: `pip install -r requirements.txt`
    - Set start command: `uvicorn openweather.main:app --host 0.0.0.0 --port $PORT`
    - Set environment variable: `PORT=10000`
 
