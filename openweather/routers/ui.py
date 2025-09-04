@@ -1,6 +1,7 @@
 """UI router for web interface and form handling."""
 
 import logging
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urlencode
 
@@ -192,6 +193,7 @@ async def run_job(
     state: str = Form("Unknown"),
     country: str = Form("Unknown"),
     convert_to_epw: bool = Form(True),
+    download_folder: str = Form("Downloads/OpenWeather"),
 ):
     """Handle form submission and run NSRDB job."""
     try:
@@ -219,6 +221,7 @@ async def run_job(
                     state=state,
                     country=country,
                     convert_to_epw=convert_to_epw,
+                    download_folder=download_folder,
                 )
                 logging.info(f"Job completed: {result}")
             except Exception as e:
@@ -231,7 +234,7 @@ async def run_job(
         
         # Return immediately with job info
         try:
-            job_dir = nsrdb_wrapper.storage.create_job_directory(wkt, dataset, year_list)
+            job_dir = nsrdb_wrapper.storage.create_job_directory(wkt, dataset, year_list, location, state, country, download_folder)
             logging.info(f"Created job directory: {job_dir}")
         except Exception as e:
             logging.error(f"Error creating job directory: {e}")
@@ -268,9 +271,35 @@ async def run_job(
 async def view_results(request: Request, job_id: str):
     """View results for a specific job."""
     try:
-        # Get job results from storage
-        job_dir = settings.outputs_dir / job_id
-        if not job_dir.exists():
+        # Try to find the job directory in multiple locations
+        possible_locations = [
+            settings.outputs_dir / job_id,  # Original outputs directory
+            Path.home() / "Downloads" / "OpenWeather" / job_id,  # Default downloads location
+            Path.cwd() / "OpenWeather" / job_id,  # Custom folder in current directory
+        ]
+        
+        job_dir = None
+        for location in possible_locations:
+            if location.exists():
+                job_dir = location
+                break
+        
+        if not job_dir:
+            # If not found in standard locations, try to find it in any Downloads subdirectory
+            downloads_path = Path.home() / "Downloads"
+            for subdir in downloads_path.rglob(job_id):
+                if subdir.is_dir():
+                    job_dir = subdir
+                    break
+            
+            # Also check current working directory and its subdirectories
+            if not job_dir:
+                for subdir in Path.cwd().rglob(job_id):
+                    if subdir.is_dir():
+                        job_dir = subdir
+                        break
+        
+        if not job_dir:
             raise HTTPException(status_code=404, detail="Job not found")
         
         # Get files from job directory

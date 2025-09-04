@@ -16,25 +16,31 @@ class StorageService:
         self.base_output_dir = Path(base_output_dir)
         self.base_output_dir.mkdir(exist_ok=True)
     
-    def create_job_directory(self, wkt: str, dataset: str, years: List[str]) -> Path:
+    def create_job_directory(self, wkt: str, dataset: str, years: List[str], location: str = "Unknown Location", state: str = "Unknown State", country: str = "Planet Earth", download_folder: str = "Downloads/OpenWeather") -> Path:
         """Create a unique directory for a job."""
-        # Extract coordinates for naming
-        coords = parse_point_from_wkt(wkt)
-        if coords:
-            lat, lon = coords
-            location_name = f"{lat:.4f}_{lon:.4f}"
-        else:
-            location_name = "unknown_location"
-        
         # Create timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        # Create directory name
-        dir_name = f"{location_name}_{dataset}_{'_'.join(years)}_{timestamp}"
-        job_dir = self.base_output_dir / dir_name
-        job_dir.mkdir(exist_ok=True)
+        # Create job name: Location_State_Country_YYYYMMDDHHMMSS
+        job_name = f"{location}_{state}_{country}_{timestamp}"
         
-        return job_dir
+        # Create the full path
+        if download_folder.startswith("Downloads/"):
+            # Use user's downloads folder
+            downloads_path = Path.home() / "Downloads"
+            full_path = downloads_path / download_folder.replace("Downloads/", "") / job_name
+        else:
+            # Use custom folder - ensure it's an absolute path
+            if Path(download_folder).is_absolute():
+                full_path = Path(download_folder) / job_name
+            else:
+                # If relative path, make it relative to current working directory
+                full_path = Path.cwd() / download_folder / job_name
+        
+        # Create all necessary directories
+        full_path.mkdir(parents=True, exist_ok=True)
+        
+        return full_path
     
     def save_csv_file(self, job_dir: Path, content: str, filename: str) -> Path:
         """Save CSV content to file."""
