@@ -476,20 +476,18 @@ document.getElementById('nsrdb-form').addEventListener('submit', function(e) {
     let yearSelect = document.getElementById('years');
     let selectedYears = Array.from(yearSelect.selectedOptions).map(option => option.value);
     
-    // Create hidden input for years if multiple years are selected
+    // Create a single hidden input with comma-separated years
     if (selectedYears.length > 0) {
         // Remove any existing hidden year inputs
         let existingHidden = document.querySelectorAll('input[name="years"]');
         existingHidden.forEach(input => input.remove());
         
-        // Add hidden inputs for each selected year
-        selectedYears.forEach(year => {
-            let hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.name = 'years';
-            hiddenInput.value = year;
-            this.appendChild(hiddenInput);
-        });
+        // Add a single hidden input with all years comma-separated
+        let hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = 'years';
+        hiddenInput.value = selectedYears.join(',');
+        this.appendChild(hiddenInput);
     }
     
     // Show progress bars

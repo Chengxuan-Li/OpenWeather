@@ -204,8 +204,11 @@ class NSRDBWrapper:
                 completed_downloads = 0
                 completed_conversions = 0
                 
+                # Process each year
                 for year_idx, name in enumerate(unique_years):
                     self.logger.info(f"Processing year: {name} ({year_idx + 1}/{len(unique_years)})")
+                    
+                    # Process each point for this year
                     for point_idx, location_ids in enumerate(POINTS):
                         input_data['names'] = [name]
                         input_data['location_ids'] = location_ids
