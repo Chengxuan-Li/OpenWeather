@@ -1,3 +1,41 @@
+Metadata-Version: 2.4
+Name: openweather
+Version: 0.1.0
+Summary: Web interface for NSRDB to EPW pipeline
+Author-email: OpenWeather Team <team@openweather.com>
+License: MIT
+Project-URL: Homepage, https://github.com/your-org/openweather
+Project-URL: Repository, https://github.com/your-org/openweather
+Project-URL: Documentation, https://github.com/your-org/openweather#readme
+Keywords: weather,nsrdb,epw,climate,energy
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.104.0
+Requires-Dist: uvicorn[standard]>=0.24.0
+Requires-Dist: jinja2>=3.1.0
+Requires-Dist: python-multipart>=0.0.6
+Requires-Dist: requests>=2.31.0
+Requires-Dist: pandas>=2.0.0
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: shapely>=2.0.0
+Requires-Dist: aiofiles>=23.0.0
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: pydantic-settings>=2.0.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.4.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.21.0; extra == "dev"
+Requires-Dist: httpx>=0.25.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+Requires-Dist: black>=23.0.0; extra == "dev"
+Requires-Dist: mypy>=1.5.0; extra == "dev"
+
 # OpenWeather
 
 A web-based interface for the NSRDB to EPW pipeline, replicating the workflow from [NSRDB2EPW.ipynb](https://github.com/kastnerp/NREL-PSB3-2-EPW).

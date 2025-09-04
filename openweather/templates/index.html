@@ -1,0 +1,549 @@
+{% extends "base.html" %}
+
+{% block title %}OpenWeather - NSRDB to EPW Pipeline{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <!-- Form Section -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-2xl font-bold text-gray-900 mb-6">NSRDB Data Request</h2>
+        
+        <form id="nsrdb-form" hx-post="/run" hx-target="#results" hx-swap="outerHTML">
+            <!-- WKT Geometry -->
+            <div class="form-group">
+                <label for="wkt" class="form-label">WKT Geometry *</label>
+                <textarea 
+                    id="wkt" 
+                    name="wkt" 
+                    class="form-input" 
+                    rows="3" 
+                    placeholder="POINT(-76.48408307172359 42.45094507085529)"
+                    required
+                >{{ form_data.wkt if form_data else "" }}</textarea>
+                <p class="text-sm text-gray-500 mt-1">
+                    Enter WKT geometry string (POINT, POLYGON, etc.) or use the map below
+                </p>
+            </div>
+
+            <!-- Dataset Selection -->
+            <div class="form-group">
+                <label for="dataset" class="form-label">Dataset *</label>
+                <select id="dataset" name="dataset" class="form-select" required>
+                    <option value="">Select a dataset...</option>
+                    {% for key, value in datasets.items() %}
+                    <option value="{{ value }}" {% if form_data and form_data.dataset == value %}selected{% endif %}>
+                        {{ key|title }} ({{ value }})
+                    </option>
+                    {% endfor %}
+                </select>
+                <div class="mt-2 text-sm text-gray-600">
+                    <strong>Coverage:</strong>
+                    <ul class="list-disc list-inside mt-1">
+                        <li><strong>CONUS:</strong> USA Continental and Mexico (2021-2024)</li>
+                        <li><strong>Full-disc:</strong> USA and Americas (2018-2024)</li>
+                        <li><strong>Aggregated:</strong> USA and Americas (1998-2024)</li>
+                        <li><strong>TMY:</strong> USA and Americas (2022-2024)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Interval Selection -->
+            <div class="form-group">
+                <label for="interval" class="form-label">Temporal Resolution *</label>
+                <select id="interval" name="interval" class="form-select" required>
+                    <option value="">Select interval...</option>
+                </select>
+                <p class="text-sm text-gray-500 mt-1">
+                    Available intervals depend on selected dataset
+                </p>
+            </div>
+
+            <!-- Years -->
+            <div class="form-group">
+                <label for="years" class="form-label">Years *</label>
+                <select id="years" name="years" class="form-select" required multiple style="height: 120px;">
+                    <option value="">Select years...</option>
+                </select>
+                <p class="text-sm text-gray-500 mt-1">
+                    Hold Ctrl/Cmd to select multiple years (like selecting files)
+                </p>
+            </div>
+
+            <!-- API Key -->
+            <div class="form-group">
+                <label for="api_key" class="form-label">NSRDB API Key *</label>
+                <input 
+                    type="text" 
+                    id="api_key" 
+                    name="api_key" 
+                    class="form-input" 
+                    placeholder="Your NSRDB API key"
+                    value="{{ form_data.api_key if form_data else '' }}"
+                    required
+                >
+                <p class="text-sm text-gray-500 mt-1">
+                    <a href="https://developer.nrel.gov/signup/" target="_blank" class="text-blue-600 hover:underline">
+                        Get your API key from NREL
+                    </a>
+                </p>
+            </div>
+
+            <!-- Email -->
+            <div class="form-group">
+                <label for="email" class="form-label">Email *</label>
+                <input 
+                    type="email" 
+                    id="email" 
+                    name="email" 
+                    class="form-input" 
+                    placeholder="your.email@example.com"
+                    value="{{ form_data.email if form_data else 'example@my.org' }}"
+                    required
+                >
+                <p class="text-sm text-gray-500 mt-1">
+                    Your email address must be registered with NREL. Use a real email address.
+                </p>
+            </div>
+
+            <!-- Location Info -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label for="location" class="form-label">Location</label>
+                    <input 
+                        type="text" 
+                        id="location" 
+                        name="location" 
+                        class="form-input" 
+                        placeholder="City name"
+                        value="{{ form_data.location if form_data else '' }}"
+                    >
+                </div>
+                <div class="form-group">
+                    <label for="state" class="form-label">State</label>
+                    <input 
+                        type="text" 
+                        id="state" 
+                        name="state" 
+                        class="form-input" 
+                        placeholder="State/Province"
+                        value="{{ form_data.state if form_data else '' }}"
+                    >
+                </div>
+                <div class="form-group">
+                    <label for="country" class="form-label">Country</label>
+                    <input 
+                        type="text" 
+                        id="country" 
+                        name="country" 
+                        class="form-input" 
+                        placeholder="Country"
+                        value="{{ form_data.country if form_data else '' }}"
+                    >
+                </div>
+            </div>
+            
+            <!-- Derive from Map Button -->
+            <div class="form-group">
+                <button type="button" id="derive-from-map" class="btn btn-secondary w-full">
+                    <svg class="w-4 h-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                    Derive Location from Map Selection
+                </button>
+                <p class="text-sm text-gray-500 mt-1">
+                    Click on the map first, then use this button to auto-fill location details
+                </p>
+            </div>
+
+            <!-- Convert to EPW -->
+            <div class="form-group">
+                <label class="flex items-center">
+                    <input 
+                        type="checkbox" 
+                        id="convert_to_epw" 
+                        name="convert_to_epw" 
+                        class="mr-2"
+                        {% if not form_data or form_data.convert_to_epw %}checked{% endif %}
+                    >
+                    <span class="form-label mb-0">Convert to EPW format</span>
+                </label>
+                <p class="text-sm text-gray-500 mt-1">
+                    Automatically convert CSV outputs to EPW files
+                </p>
+            </div>
+
+            <!-- Progress Bars -->
+            <div id="progress-container" class="hidden">
+                <div class="mb-4">
+                    <label class="text-sm font-medium text-gray-700">Download Progress</label>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div id="download-progress" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                    <div id="download-status" class="text-xs text-gray-600 mt-1">Preparing download...</div>
+                </div>
+                
+                <div id="epw-progress-container" class="mb-4 hidden">
+                    <label class="text-sm font-medium text-gray-700">EPW Conversion Progress</label>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div id="epw-progress" class="bg-green-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                    <div id="epw-status" class="text-xs text-gray-600 mt-1">Preparing conversion...</div>
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary w-full">
+                    <span class="htmx-indicator">Processing...</span>
+                    <span>Download Weather Data</span>
+                </button>
+            </div>
+        </form>
+
+        <!-- Example URL -->
+        <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Example URL:</h3>
+            <code class="text-xs text-gray-600 break-all">
+                /q?wkt=POINT(-76.5+42.4)&dataset=nsrdb-GOES-full-disc-v4-0-0&years=2021&interval=60&apikey=YOUR_KEY&email=you@mail.com&as_epw=true
+            </code>
+        </div>
+    </div>
+
+    <!-- Map Section -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-2xl font-bold text-gray-900 mb-6">Interactive Map</h2>
+        
+        <div class="mb-4">
+            <p class="text-sm text-gray-600 mb-2">
+                Click on the map to place a point, or draw a polygon/rectangle to generate WKT geometry.
+            </p>
+            <div class="flex space-x-2">
+                <button id="clear-map" class="btn btn-secondary text-sm">Clear Map</button>
+                <button id="center-us" class="btn btn-secondary text-sm">Center on US</button>
+            </div>
+        </div>
+
+        <div id="map" class="map-container rounded-lg border"></div>
+        
+        <div class="mt-4 p-3 bg-blue-50 rounded-lg">
+            <h3 class="text-sm font-semibold text-blue-800 mb-2">Map Instructions:</h3>
+            <ul class="text-xs text-blue-700 space-y-1">
+                <li>• Click the map to place a point marker</li>
+                <li>• Use the draw tools to create polygons or rectangles</li>
+                <li>• The WKT geometry will automatically update in the form</li>
+                <li>• Double-click to finish drawing shapes</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Results Section -->
+<div id="results" class="mt-8"></div>
+
+<!-- Loading Indicator -->
+<div class="htmx-indicator fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-4 rounded-lg shadow-lg border">
+    <div class="flex items-center space-x-2">
+        <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+        <span class="text-gray-700">Processing your request...</span>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Initialize map
+let map = L.map('map').setView([39.8283, -98.5795], 4); // Center on US
+
+// Add OpenStreetMap tiles
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+}).addTo(map);
+
+// Initialize draw control
+let drawnItems = new L.FeatureGroup();
+map.addLayer(drawnItems);
+
+let drawControl = new L.Control.Draw({
+    draw: {
+        polygon: {
+            allowIntersection: false,
+            drawError: {
+                color: '#e1e100',
+                message: '<strong>Oh snap!<strong> you can\'t draw that!'
+            },
+            shapeOptions: {
+                color: '#bada55'
+            }
+        },
+        rectangle: {
+            shapeOptions: {
+                color: '#bada55'
+            }
+        },
+        circle: false,
+        circlemark: false,
+        marker: false,
+        polyline: false
+    },
+    edit: {
+        featureGroup: drawnItems,
+        remove: true
+    }
+});
+map.addControl(drawControl);
+
+// Handle draw events
+map.on('draw:created', function (e) {
+    let layer = e.layer;
+    drawnItems.addLayer(layer);
+    
+    // Convert to WKT and update form
+    let wkt = layer.toWKT();
+    document.getElementById('wkt').value = wkt;
+});
+
+map.on('draw:edited', function (e) {
+    let layers = e.layers;
+    layers.eachLayer(function (layer) {
+        let wkt = layer.toWKT();
+        document.getElementById('wkt').value = wkt;
+    });
+});
+
+map.on('draw:deleted', function (e) {
+    document.getElementById('wkt').value = '';
+});
+
+// Handle map clicks for points
+map.on('click', function (e) {
+    // Clear existing markers
+    drawnItems.clearLayers();
+    
+    // Add new marker
+    let marker = L.marker(e.latlng).addTo(drawnItems);
+    
+    // Convert to WKT and update form
+    let wkt = `POINT(${e.latlng.lng} ${e.latlng.lat})`;
+    document.getElementById('wkt').value = wkt;
+});
+
+// Clear map button
+document.getElementById('clear-map').addEventListener('click', function() {
+    drawnItems.clearLayers();
+    document.getElementById('wkt').value = '';
+});
+
+// Center on US button
+document.getElementById('center-us').addEventListener('click', function() {
+    map.setView([39.8283, -98.5795], 4);
+});
+
+// Derive location from map selection
+function deriveLocationFromMap() {
+    const wkt = document.getElementById('wkt').value;
+    if (!wkt || wkt.trim() === '') {
+        alert('Please select a location on the map first.');
+        return;
+    }
+    
+    // Extract coordinates from WKT
+    const match = wkt.match(/POINT\(([^)]+)\)/);
+    if (!match) {
+        alert('Invalid WKT format. Please select a point on the map.');
+        return;
+    }
+    
+    const coords = match[1].split(' ');
+    const lng = parseFloat(coords[0]);
+    const lat = parseFloat(coords[1]);
+    
+    // Use Nominatim for reverse geocoding
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
+        .then(response => response.json())
+        .then(data => {
+            // Always override existing values with derived location data
+            const locationInput = document.getElementById('location');
+            const stateInput = document.getElementById('state');
+            const countryInput = document.getElementById('country');
+            
+            if (data.address) {
+                locationInput.value = data.address.city || data.address.town || data.address.village || data.address.county || 'Unknown Location';
+                stateInput.value = data.address.state || data.address.province || data.address.region || 'Unknown State';
+                countryInput.value = data.address.country || 'Planet Earth';
+            } else {
+                // Fill with default values if no address data
+                locationInput.value = 'Unknown Location';
+                stateInput.value = 'Unknown State';
+                countryInput.value = 'Planet Earth';
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching location data:', error);
+            // Fill with default values on error instead of showing alert
+            const locationInput = document.getElementById('location');
+            const stateInput = document.getElementById('state');
+            const countryInput = document.getElementById('country');
+            
+            locationInput.value = 'Unknown Location';
+            stateInput.value = 'Unknown State';
+            countryInput.value = 'Planet Earth';
+        });
+}
+
+// Single derive from map button event listener
+document.getElementById('derive-from-map').addEventListener('click', function() {
+    deriveLocationFromMap();
+});
+
+// Dataset change handler
+document.getElementById('dataset').addEventListener('change', function() {
+    let dataset = this.value;
+    let intervalSelect = document.getElementById('interval');
+    let yearSelect = document.getElementById('years');
+    let intervals = {{ dataset_intervals | tojson }};
+    let years = {{ dataset_years | tojson }};
+    
+    // Clear current options
+    intervalSelect.innerHTML = '<option value="">Select interval...</option>';
+    yearSelect.innerHTML = '<option value="">Select years...</option>';
+    
+    // Find the short dataset key from the full name
+    let datasetKey = null;
+    let datasets = {{ datasets | tojson }};
+    for (let key in datasets) {
+        if (datasets[key] === dataset) {
+            datasetKey = key;
+            break;
+        }
+    }
+    
+    // Add interval options based on dataset
+    if (datasetKey && intervals[datasetKey]) {
+        intervals[datasetKey].forEach(function(interval) {
+            let option = document.createElement('option');
+            option.value = interval;
+            option.textContent = interval + ' minutes';
+            intervalSelect.appendChild(option);
+        });
+    }
+    
+    // Add year options based on dataset
+    if (datasetKey && years[datasetKey]) {
+        years[datasetKey].forEach(function(year) {
+            let option = document.createElement('option');
+            option.value = year;
+            option.textContent = year;
+            yearSelect.appendChild(option);
+        });
+    }
+});
+
+// Initialize intervals if dataset is pre-filled
+if (document.getElementById('dataset').value) {
+    document.getElementById('dataset').dispatchEvent(new Event('change'));
+}
+
+// Handle form submission to convert multiple select to proper format
+document.getElementById('nsrdb-form').addEventListener('submit', function(e) {
+    let yearSelect = document.getElementById('years');
+    let selectedYears = Array.from(yearSelect.selectedOptions).map(option => option.value);
+    
+    // Create hidden input for years if multiple years are selected
+    if (selectedYears.length > 0) {
+        // Remove any existing hidden year inputs
+        let existingHidden = document.querySelectorAll('input[name="years"]');
+        existingHidden.forEach(input => input.remove());
+        
+        // Add hidden inputs for each selected year
+        selectedYears.forEach(year => {
+            let hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = 'years';
+            hiddenInput.value = year;
+            this.appendChild(hiddenInput);
+        });
+    }
+    
+    // Show progress bars
+    const progressContainer = document.getElementById('progress-container');
+    const epwProgressContainer = document.getElementById('epw-progress-container');
+    const convertToEpw = document.getElementById('convert_to_epw').checked;
+    
+    progressContainer.classList.remove('hidden');
+    if (convertToEpw) {
+        epwProgressContainer.classList.remove('hidden');
+    }
+    
+    // Reset progress
+    document.getElementById('download-progress').style.width = '0%';
+    document.getElementById('epw-progress').style.width = '0%';
+    document.getElementById('download-status').textContent = 'Preparing download...';
+    document.getElementById('epw-status').textContent = 'Preparing conversion...';
+    
+    // Show loading state
+    const submitBtn = this.querySelector('button[type="submit"]');
+    submitBtn.innerHTML = '<span>Processing...</span>';
+    submitBtn.disabled = true;
+    
+    // Store job ID for progress tracking
+    let currentJobId = null;
+    
+    // Extract job ID from the response
+    const responseText = event.detail.xhr.responseText;
+    try {
+        const responseData = JSON.parse(responseText);
+        if (responseData.job_id) {
+            currentJobId = responseData.job_id;
+        }
+    } catch (e) {
+        console.log('Could not parse response for job ID');
+    }
+    
+    // Poll for real progress updates
+    const progressInterval = setInterval(async () => {
+        if (!currentJobId) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/progress/${currentJobId}`);
+            if (response.ok) {
+                const progress = await response.json();
+                
+                // Update download progress
+                document.getElementById('download-progress').style.width = progress.download_progress + '%';
+                document.getElementById('download-status').textContent = 
+                    `Downloading... ${Math.round(progress.download_progress)}% (${progress.completed_downloads}/${progress.total_downloads})`;
+                
+                // Update conversion progress if EPW conversion is enabled
+                if (convertToEpw) {
+                    document.getElementById('epw-progress').style.width = progress.conversion_progress + '%';
+                    document.getElementById('epw-status').textContent = 
+                        `Converting to EPW... ${Math.round(progress.conversion_progress)}% (${progress.completed_conversions}/${progress.total_downloads})`;
+                }
+                
+                // Stop polling if job is completed or failed
+                if (progress.status === 'completed' || progress.status === 'failed') {
+                    clearInterval(progressInterval);
+                    if (progress.status === 'failed') {
+                        document.getElementById('download-status').textContent = `Failed: ${progress.error || 'Unknown error'}`;
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching progress:', error);
+        }
+    }, 2000); // Poll every 2 seconds
+});
+
+// HTMX loading indicator
+document.body.addEventListener('htmx:beforeRequest', function() {
+    document.querySelector('.htmx-indicator').style.display = 'block';
+});
+
+document.body.addEventListener('htmx:afterRequest', function() {
+    document.querySelector('.htmx-indicator').style.display = 'none';
+});
+</script>
+{% endblock %}

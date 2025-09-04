@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block title %}Error - OpenWeather{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-lg shadow-md p-6">
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-gray-900">Error</h2>
+        <a href="/" class="btn btn-secondary">Go Home</a>
+    </div>
+
+    <!-- Error Message -->
+    <div class="alert alert-error mb-6">
+        <h3 class="font-semibold">❌ An error occurred</h3>
+        <p class="mt-1">Please review the details below and try again.</p>
+    </div>
+
+    <!-- Error Details -->
+    {% if errors %}
+    <div class="mb-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Error Details</h3>
+        <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+            <ul class="list-disc list-inside text-red-800 space-y-1">
+                {% for error in errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Form Data (if available) -->
+    {% if form_data %}
+    <div class="mb-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Your Form Data</h3>
+        <p class="text-sm text-gray-600 mb-3">
+            Your form data has been preserved below. You can review and correct any issues.
+        </p>
+        
+        <form hx-post="/run" hx-target="#results" hx-swap="outerHTML">
+            <!-- WKT Geometry -->
+            <div class="form-group">
+                <label for="wkt" class="form-label">WKT Geometry *</label>
+                <textarea 
+                    id="wkt" 
+                    name="wkt" 
+                    class="form-input" 
+                    rows="3" 
+                    placeholder="POINT(-76.48408307172359 42.45094507085529)"
+                    required
+                >{{ form_data.wkt }}</textarea>
+            </div>
+
+            <!-- Dataset Selection -->
+            <div class="form-group">
+                <label for="dataset" class="form-label">Dataset *</label>
+                <select id="dataset" name="dataset" class="form-select" required>
+                    <option value="">Select a dataset...</option>
+                    {% for key, value in datasets.items() %}
+                    <option value="{{ value }}" {% if form_data.dataset == value %}selected{% endif %}>
+                        {{ key|title }} ({{ value }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Interval Selection -->
+            <div class="form-group">
+                <label for="interval" class="form-label">Temporal Resolution *</label>
+                <select id="interval" name="interval" class="form-select" required>
+                    <option value="">Select interval...</option>
+                </select>
+            </div>
+
+            <!-- Years -->
+            <div class="form-group">
+                <label for="years" class="form-label">Years *</label>
+                <select id="years" name="years" class="form-select" required multiple style="height: 120px;">
+                    <option value="">Select years...</option>
+                </select>
+                <p class="text-sm text-gray-500 mt-1">
+                    Hold Ctrl/Cmd to select multiple years (like selecting files)
+                </p>
+            </div>
+
+            <!-- API Key -->
+            <div class="form-group">
+                <label for="api_key" class="form-label">NSRDB API Key *</label>
+                <input 
+                    type="text" 
+                    id="api_key" 
+                    name="api_key" 
+                    class="form-input" 
+                    placeholder="Your NSRDB API key"
+                    value="{{ form_data.api_key }}"
+                    required
+                >
+            </div>
+
+            <!-- Email -->
+            <div class="form-group">
+                <label for="email" class="form-label">Email *</label>
+                <input 
+                    type="email" 
+                    id="email" 
+                    name="email" 
+                    class="form-input" 
+                    placeholder="your.email@example.com"
+                    value="{{ form_data.email if form_data.email else 'example@my.org' }}"
+                    required
+                >
+                <p class="text-sm text-gray-500 mt-1">
+                    Your email address must be registered with NREL. Use a real email address.
+                </p>
+            </div>
+
+            <!-- Location Info -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label for="location" class="form-label">Location</label>
+                    <input 
+                        type="text" 
+                        id="location" 
+                        name="location" 
+                        class="form-input" 
+                        placeholder="City name"
+                        value="{{ form_data.location }}"
+                    >
+                </div>
+                <div class="form-group">
+                    <label for="state" class="form-label">State</label>
+                    <input 
+                        type="text" 
+                        id="state" 
+                        name="state" 
+                        class="form-input" 
+                        placeholder="State/Province"
+                        value="{{ form_data.state }}"
+                    >
+                </div>
+                <div class="form-group">
+                    <label for="country" class="form-label">Country</label>
+                    <input 
+                        type="text" 
+                        id="country" 
+                        name="country" 
+                        class="form-input" 
+                        placeholder="Country"
+                        value="{{ form_data.country }}"
+                    >
+                </div>
+            </div>
+
+            <!-- Convert to EPW -->
+            <div class="form-group">
+                <label class="flex items-center">
+                    <input 
+                        type="checkbox" 
+                        id="convert_to_epw" 
+                        name="convert_to_epw" 
+                        class="mr-2"
+                        {% if form_data.convert_to_epw %}checked{% endif %}
+                    >
+                    <span class="form-label mb-0">Convert to EPW format</span>
+                </label>
+            </div>
+
+            <!-- Submit Button -->
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary w-full">Try Again</button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+
+    <!-- Help Section -->
+    <div class="bg-blue-50 rounded-lg p-4">
+        <h3 class="text-lg font-semibold text-blue-900 mb-3">Need Help?</h3>
+        <div class="text-sm text-blue-800 space-y-2">
+            <p><strong>Common Issues:</strong></p>
+            <ul class="list-disc list-inside space-y-1">
+                <li>Invalid WKT geometry format - Use standard WKT syntax like <code>POINT(lon lat)</code></li>
+                <li>Missing or invalid API key - Get your key from <a href="https://developer.nrel.gov/signup/" class="underline">NREL</a></li>
+                <li>Invalid email format - Use a valid email address</li>
+                <li>Unsupported year range - Check dataset availability for your selected years</li>
+                <li>Invalid interval - Choose from available intervals for your dataset</li>
+            </ul>
+        </div>
+        
+        <div class="mt-4">
+            <a href="/" class="text-blue-600 hover:underline text-sm">Start a new request →</a>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="flex space-x-4 mt-6">
+        <a href="/" class="btn btn-primary">Start New Request</a>
+        <button onclick="window.history.back()" class="btn btn-secondary">Go Back</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Dataset change handler for error form
+document.getElementById('dataset').addEventListener('change', function() {
+    let dataset = this.value;
+    let intervalSelect = document.getElementById('interval');
+    let yearSelect = document.getElementById('years');
+    let intervals = {{ dataset_intervals | tojson }};
+    let years = {{ dataset_years | tojson }};
+    
+    // Clear current options
+    intervalSelect.innerHTML = '<option value="">Select interval...</option>';
+    yearSelect.innerHTML = '<option value="">Select years...</option>';
+    
+    // Find the short dataset key from the full name
+    let datasetKey = null;
+    let datasets = {{ datasets | tojson }};
+    for (let key in datasets) {
+        if (datasets[key] === dataset) {
+            datasetKey = key;
+            break;
+        }
+    }
+    
+    // Add interval options based on dataset
+    if (datasetKey && intervals[datasetKey]) {
+        intervals[datasetKey].forEach(function(interval) {
+            let option = document.createElement('option');
+            option.value = interval;
+            option.textContent = interval + ' minutes';
+            intervalSelect.appendChild(option);
+        });
+    }
+    
+    // Add year options based on dataset
+    if (datasetKey && years[datasetKey]) {
+        years[datasetKey].forEach(function(year) {
+            let option = document.createElement('option');
+            option.value = year;
+            option.textContent = year;
+            yearSelect.appendChild(option);
+        });
+    }
+});
+
+// Initialize intervals if dataset is pre-filled
+if (document.getElementById('dataset').value) {
+    document.getElementById('dataset').dispatchEvent(new Event('change'));
+}
+
+// Handle form submission to convert multiple select to proper format
+document.querySelector('form').addEventListener('submit', function(e) {
+    let yearSelect = document.getElementById('years');
+    let selectedYears = Array.from(yearSelect.selectedOptions).map(option => option.value);
+    
+    // Create hidden input for years if multiple years are selected
+    if (selectedYears.length > 0) {
+        // Remove any existing hidden year inputs
+        let existingHidden = document.querySelectorAll('input[name="years"]');
+        existingHidden.forEach(input => input.remove());
+        
+        // Add hidden inputs for each selected year
+        selectedYears.forEach(year => {
+            let hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = 'years';
+            hiddenInput.value = year;
+            this.appendChild(hiddenInput);
+        });
+    }
+});
+</script>
+{% endblock %}

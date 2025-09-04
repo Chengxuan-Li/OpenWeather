@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}Results - OpenWeather{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-lg shadow-md p-6">
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-gray-900">Job Results</h2>
+        <a href="/" class="btn btn-secondary">New Request</a>
+    </div>
+
+    {% if result.success %}
+        <!-- Success Results -->
+        <div class="alert alert-success mb-6">
+            <h3 class="font-semibold">✅ Job completed successfully!</h3>
+            <p class="mt-1">Your weather data has been processed and is ready for download.</p>
+        </div>
+
+        <!-- Job Summary -->
+        {% if job_summary %}
+        <div class="bg-gray-50 rounded-lg p-4 mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-3">Job Summary</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                    <span class="text-sm text-gray-600">Job Name:</span>
+                    <p class="font-medium">{{ job_summary.job_name }}</p>
+                </div>
+                <div>
+                    <span class="text-sm text-gray-600">Total Files:</span>
+                    <p class="font-medium">{{ job_summary.total_files }}</p>
+                </div>
+                <div>
+                    <span class="text-sm text-gray-600">Total Size:</span>
+                    <p class="font-medium">{{ job_summary.total_size_formatted }}</p>
+                </div>
+                <div>
+                    <span class="text-sm text-gray-600">Created:</span>
+                    <p class="font-medium">{{ job_summary.created[:19] }}</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Download Files -->
+        {% if result.files %}
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Download Files</h3>
+            
+            <!-- CSV Files -->
+            {% if result.files.csv %}
+            <div class="mb-4">
+                <h4 class="text-md font-medium text-gray-800 mb-2">📊 CSV Files ({{ result.files.csv|length }})</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {% for csv_file in result.files.csv %}
+                    <a href="/api/download-file/{{ csv_file.split('/')[-2:] | join('/') }}" 
+                       class="flex items-center p-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                        <span class="text-blue-600 mr-2">📄</span>
+                        <span class="text-sm text-blue-800">{{ csv_file.split('/')[-1] }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- EPW Files -->
+            {% if result.files.epw %}
+            <div class="mb-4">
+                <h4 class="text-md font-medium text-gray-800 mb-2">🌤️ EPW Files ({{ result.files.epw|length }})</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {% for epw_file in result.files.epw %}
+                    <a href="/api/download-file/{{ epw_file.split('/')[-2:] | join('/') }}" 
+                       class="flex items-center p-3 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
+                        <span class="text-green-600 mr-2">🌤️</span>
+                        <span class="text-sm text-green-800">{{ epw_file.split('/')[-1] }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Download All -->
+            <div class="mt-4 p-4 bg-yellow-50 rounded-lg">
+                <h4 class="text-md font-medium text-yellow-800 mb-2">📦 Download All Files</h4>
+                <p class="text-sm text-yellow-700 mb-3">
+                    You can download individual files above, or use the job directory path for programmatic access.
+                </p>
+                <code class="text-xs bg-yellow-100 p-2 rounded block">{{ result.job_dir }}</code>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Job Logs -->
+        {% if result.logs %}
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Job Logs</h3>
+            <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm overflow-x-auto">
+                {% for log in result.logs %}
+                <div class="mb-1">{{ log }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+    {% else %}
+        <!-- Error Results -->
+        <div class="alert alert-error mb-6">
+            <h3 class="font-semibold">❌ Job failed</h3>
+            <p class="mt-1">There was an error processing your request.</p>
+        </div>
+
+        {% if result.errors %}
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Error Details</h3>
+            <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                <ul class="list-disc list-inside text-red-800 space-y-1">
+                    {% for error in result.errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if result.logs %}
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Job Logs</h3>
+            <div class="bg-gray-900 text-red-400 p-4 rounded-lg font-mono text-sm overflow-x-auto">
+                {% for log in result.logs %}
+                <div class="mb-1">{{ log }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    {% endif %}
+
+    <!-- Action Buttons -->
+    <div class="flex space-x-4">
+        <a href="/" class="btn btn-primary">Start New Request</a>
+        <button onclick="window.history.back()" class="btn btn-secondary">Go Back</button>
+    </div>
+</div>
+
+<!-- API Information -->
+<div class="mt-6 bg-white rounded-lg shadow-md p-6">
+    <h3 class="text-lg font-semibold text-gray-900 mb-4">API Access</h3>
+    <p class="text-sm text-gray-600 mb-4">
+        You can also access this functionality programmatically using our REST API.
+    </p>
+    
+    <div class="bg-gray-50 rounded-lg p-4">
+        <h4 class="text-md font-medium text-gray-800 mb-2">Example API Call:</h4>
+        <code class="text-xs bg-gray-100 p-2 rounded block overflow-x-auto">
+curl -X POST "http://localhost:8080/api/download" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "wkt": "POINT(-76.5 42.4)",
+    "dataset": "nsrdb-GOES-full-disc-v4-0-0",
+    "interval": "60",
+    "years": ["2021"],
+    "api_key": "YOUR_API_KEY",
+    "email": "your@email.com",
+    "convert_to_epw": true
+  }'
+        </code>
+    </div>
+    
+    <div class="mt-4">
+        <a href="/docs" class="text-blue-600 hover:underline text-sm">View API Documentation →</a>
+    </div>
+</div>
+{% endblock %}
