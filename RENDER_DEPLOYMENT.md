@@ -13,6 +13,7 @@ We've removed `pyproject.toml` and optimized for `requirements.txt` only.
 3. **Updated `render.yaml`** → Docker deployment
 4. **Enhanced `requirements.txt`** → Fixed versions + setuptools
 5. **Fixed `Dockerfile`** → Uses requirements.txt instead of pyproject.toml
+6. **Fixed Port Configuration** → Uses PORT environment variable
 
 ## Deployment Steps
 
@@ -35,9 +36,17 @@ We've removed `pyproject.toml` and optimized for `requirements.txt` only.
 ```
 ✅ Building Docker image...
 ✅ Installing requirements.txt...
-✅ Starting uvicorn...
+✅ Starting uvicorn on port 10000...
+✅ Health check passed...
 ✅ Application ready!
 ```
+
+## Port Configuration
+
+The application now properly handles Render's port requirements:
+- **Dockerfile**: Uses `${PORT:-8080}` to accept Render's PORT env var
+- **Health Check**: Monitors the correct port
+- **Uvicorn**: Starts on the assigned port
 
 ## If Still Stuck
 
@@ -52,7 +61,7 @@ We've removed `pyproject.toml` and optimized for `requirements.txt` only.
 ✅ render.yaml          # Docker deployment config
 ✅ requirements.txt     # Fixed dependency versions
 ✅ setup.py            # Minimal setup (no editable install)
-✅ Dockerfile          # Fixed to use requirements.txt
+✅ Dockerfile          # Fixed to use requirements.txt + PORT env var
 ❌ pyproject.toml      # Removed (causing the issue)
 ✅ runtime.txt         # Python 3.11.7
 ```
