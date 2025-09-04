@@ -263,13 +263,101 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 let drawnItems = new L.FeatureGroup();
 map.addLayer(drawnItems);
 
+// Track drawing state
+let isDrawing = false;
+let currentDrawControl = null;
+let markers = [];
+let isCircleMarkerMode = false;
+let circleMarkers = [];
+
+// WKT conversion functions
+function latLngToWKT(latLng) {
+    return `POINT(${latLng.lng} ${latLng.lat})`;
+}
+
+function polygonToWKT(polygon) {
+    const latlngs = polygon.getLatLngs()[0]; // Get outer ring
+    const coords = latlngs.map(latlng => `${latlng.lng} ${latlng.lat}`);
+    
+    // Add the first coordinate at the end to close the polygon
+    if (coords.length > 0) {
+        coords.push(coords[0]);
+    }
+    
+    return `POLYGON((${coords.join(',')}))`;
+}
+
+function rectangleToWKT(rectangle) {
+    const bounds = rectangle.getBounds();
+    const coords = [
+        `${bounds.getWest()} ${bounds.getSouth()}`,
+        `${bounds.getEast()} ${bounds.getSouth()}`,
+        `${bounds.getEast()} ${bounds.getNorth()}`,
+        `${bounds.getWest()} ${bounds.getNorth()}`,
+        `${bounds.getWest()} ${bounds.getSouth()}` // Close the polygon
+    ].join(',');
+    return `POLYGON((${coords}))`;
+}
+
+function multipointToWKT(markers) {
+    const coords = markers.map(marker => {
+        const latlng = marker.getLatLng();
+        return `${latlng.lng} ${latlng.lat}`;
+    }).join(',');
+    return `MULTIPOINT(${coords})`;
+}
+
+function updateWKT() {
+    const layers = drawnItems.getLayers();
+    if (layers.length === 0) {
+        document.getElementById('wkt').value = '';
+        return;
+    }
+    
+    // Count all marker-like layers (markers and circle markers)
+    const markerLayers = layers.filter(layer => layer instanceof L.Marker || layer instanceof L.CircleMarker);
+    
+    // If we have multiple circle markers, create MULTIPOINT
+    if (isCircleMarkerMode && circleMarkers.length > 1) {
+        const coords = circleMarkers.map(marker => {
+            const latlng = marker.getLatLng();
+            return `${latlng.lng} ${latlng.lat}`;
+        }).join(',');
+        document.getElementById('wkt').value = `MULTIPOINT(${coords})`;
+        return;
+    }
+    
+    // If we have exactly one circle marker, create POINT
+    if (isCircleMarkerMode && circleMarkers.length === 1) {
+        const latlng = circleMarkers[0].getLatLng();
+        document.getElementById('wkt').value = `POINT(${latlng.lng} ${latlng.lat})`;
+        return;
+    }
+    
+    // Otherwise, get the first layer
+    const layer = layers[0];
+    let wkt = '';
+    
+    if (layer instanceof L.Marker) {
+        wkt = latLngToWKT(layer.getLatLng());
+    } else if (layer instanceof L.CircleMarker) {
+        wkt = latLngToWKT(layer.getLatLng());
+    } else if (layer instanceof L.Polygon) {
+        wkt = polygonToWKT(layer);
+    } else if (layer instanceof L.Rectangle) {
+        wkt = rectangleToWKT(layer);
+    }
+    
+    document.getElementById('wkt').value = wkt;
+}
+
 let drawControl = new L.Control.Draw({
     draw: {
         polygon: {
             allowIntersection: false,
             drawError: {
                 color: '#e1e100',
-                message: '<strong>Oh snap!<strong> you can\'t draw that!'
+                message: '<strong>Oh snap!</strong> you can\'t draw that!'
             },
             shapeOptions: {
                 color: '#bada55'
@@ -281,7 +369,11 @@ let drawControl = new L.Control.Draw({
             }
         },
         circle: false,
-        circlemark: false,
+        circlemark: {
+            shapeOptions: {
+                color: '#bada55'
+            }
+        },
         marker: false,
         polyline: false
     },
@@ -297,39 +389,109 @@ map.on('draw:created', function (e) {
     let layer = e.layer;
     drawnItems.addLayer(layer);
     
+    // If it's a circle marker, add it to our tracking array
+    if (layer instanceof L.CircleMarker) {
+        circleMarkers.push(layer);
+    }
+    
     // Convert to WKT and update form
-    let wkt = layer.toWKT();
-    document.getElementById('wkt').value = wkt;
+    updateWKT();
+    
+    // Reset drawing state
+    isDrawing = false;
+    currentDrawControl = null;
 });
 
 map.on('draw:edited', function (e) {
     let layers = e.layers;
     layers.eachLayer(function (layer) {
-        let wkt = layer.toWKT();
-        document.getElementById('wkt').value = wkt;
+        // Update WKT for edited layers
+        updateWKT();
     });
 });
 
 map.on('draw:deleted', function (e) {
-    document.getElementById('wkt').value = '';
+    // Clear markers array when layers are deleted
+    markers = [];
+    circleMarkers = [];
+    isCircleMarkerMode = false;
+    updateWKT();
+});
+
+// Handle draw start
+map.on('draw:drawstart', function (e) {
+    isDrawing = true;
+    currentDrawControl = e.layerType;
+    
+    // Clear previous selections when starting new drawing
+    if (e.layerType === 'rectangle' || e.layerType === 'polygon') {
+        drawnItems.clearLayers();
+        markers = [];
+        circleMarkers = [];
+        isCircleMarkerMode = false;
+    } else if (e.layerType === 'circlemark') {
+        // Clear non-circle markers but keep existing circle markers
+        const layers = drawnItems.getLayers();
+        layers.forEach(layer => {
+            if (!(layer instanceof L.CircleMarker)) {
+                drawnItems.removeLayer(layer);
+            }
+        });
+        isCircleMarkerMode = true;
+    }
+});
+
+// Handle draw stop
+map.on('draw:drawstop', function (e) {
+    isDrawing = false;
+    currentDrawControl = null;
 });
 
 // Handle map clicks for points
 map.on('click', function (e) {
-    // Clear existing markers
+    // Don't handle clicks if we're drawing
+    if (isDrawing) {
+        return;
+    }
+    
+    // If we're in circle marker mode, add circle marker
+    if (isCircleMarkerMode) {
+        let circleMarker = L.circleMarker(e.latlng, {
+            radius: 8,
+            fillColor: "#bada55",
+            color: "#000",
+            weight: 1,
+            opacity: 1,
+            fillOpacity: 0.8
+        }).addTo(drawnItems);
+        
+        // Add to tracking array
+        circleMarkers.push(circleMarker);
+        
+        // Convert to WKT and update form
+        updateWKT();
+        return;
+    }
+    
+    // Regular point selection - clear everything and add single point
     drawnItems.clearLayers();
+    markers = [];
+    circleMarkers = [];
     
     // Add new marker
     let marker = L.marker(e.latlng).addTo(drawnItems);
+    markers.push(marker);
     
     // Convert to WKT and update form
-    let wkt = `POINT(${e.latlng.lng} ${e.latlng.lat})`;
-    document.getElementById('wkt').value = wkt;
+    updateWKT();
 });
 
 // Clear map button
 document.getElementById('clear-map').addEventListener('click', function() {
     drawnItems.clearLayers();
+    markers = [];
+    circleMarkers = [];
+    isCircleMarkerMode = false;
     document.getElementById('wkt').value = '';
 });
 
@@ -337,6 +499,28 @@ document.getElementById('clear-map').addEventListener('click', function() {
 document.getElementById('center-us').addEventListener('click', function() {
     map.setView([39.8283, -98.5795], 4);
 });
+
+// Function to calculate centroid of polygon coordinates
+function calculatePolygonCentroid(coords) {
+    let sumX = 0;
+    let sumY = 0;
+    let count = 0;
+    
+    // Skip the last coordinate if it's the same as the first (closing the polygon)
+    const numCoords = coords.length;
+    const effectiveCount = coords[0] === coords[numCoords - 1] ? numCoords - 1 : numCoords;
+    
+    for (let i = 0; i < effectiveCount; i += 2) {
+        sumX += parseFloat(coords[i]);
+        sumY += parseFloat(coords[i + 1]);
+        count++;
+    }
+    
+    return {
+        lng: sumX / count,
+        lat: sumY / count
+    };
+}
 
 // Derive location from map selection
 function deriveLocationFromMap() {
@@ -346,16 +530,28 @@ function deriveLocationFromMap() {
         return;
     }
     
-    // Extract coordinates from WKT
-    const match = wkt.match(/POINT\(([^)]+)\)/);
-    if (!match) {
-        alert('Invalid WKT format. Please select a point on the map.');
+    let lng, lat;
+    
+    // Extract coordinates from WKT - handle both POINT and POLYGON
+    const pointMatch = wkt.match(/POINT\(([^)]+)\)/);
+    const polygonMatch = wkt.match(/POLYGON\(\(\s*([^)]+)\s*\)\)/);
+    
+    if (pointMatch) {
+        // Handle POINT geometry
+        const coords = pointMatch[1].split(' ');
+        lng = parseFloat(coords[0]);
+        lat = parseFloat(coords[1]);
+    } else if (polygonMatch) {
+        // Handle POLYGON geometry - calculate centroid
+        const coordsString = polygonMatch[1];
+        const coords = coordsString.split(',').map(coord => coord.trim().split(' ')).flat();
+        const centroid = calculatePolygonCentroid(coords);
+        lng = centroid.lng;
+        lat = centroid.lat;
+    } else {
+        alert('Invalid WKT format. Please select a point or polygon on the map. Supported formats: POINT(lng lat) and POLYGON((lng1 lat1, lng2 lat2, ...))');
         return;
     }
-    
-    const coords = match[1].split(' ');
-    const lng = parseFloat(coords[0]);
-    const lat = parseFloat(coords[1]);
     
     // Use Nominatim for reverse geocoding
     fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&accept-language=en`)

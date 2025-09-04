@@ -108,24 +108,37 @@ class NSRDBWrapper:
         - Calls nsrdb2epw.nsrdb2epw
         - Returns file paths and logs
         """
+        # Create job directory and ID first, before any processing
+        job_dir = self.storage.create_job_directory(wkt, dataset, years, location, state, country)
+        job_id = job_dir.name  # Use directory name as job ID for progress tracking
+        
+        # Initialize progress tracking - we'll update with actual points later
+        unique_years = len(set(years))
+        progress_manager.create_job(job_id, unique_years, total_points=1)  # Temporary, will be updated
+        
+        # Prepare logs
+        logs = []
+        logs.append(f"Job started at: {job_dir}")
+        logs.append(f"WKT: {wkt}")
+        logs.append(f"Dataset: {dataset}")
+        logs.append(f"Interval: {interval}")
+        logs.append(f"Years: {', '.join(years)}")
+        logs.append(f"Location: {location}, {state}, {country}")
+        
         try:
             # Validate inputs
             errors = self.validate_inputs(wkt, dataset, interval, years, api_key, email)
             if errors:
+                # Mark job as failed
+                progress_manager.fail_job(job_id, "; ".join(errors))
                 return {
                     "success": False,
+                    "job_id": job_id,
+                    "job_dir": str(job_dir),
                     "errors": errors,
-                    "files": [],
-                    "logs": []
+                    "files": {},
+                    "logs": logs
                 }
-            
-            # Create job directory
-            job_dir = self.storage.create_job_directory(wkt, dataset, years, location, state, country)
-            job_id = job_dir.name  # Use directory name as job ID for progress tracking
-            
-            # Initialize progress tracking - use unique years count
-            unique_years = len(set(years))
-            progress_manager.create_job(job_id, unique_years)
             
             self.logger.info(f"Starting NSRDB job in directory: {job_dir}")
             
@@ -185,6 +198,11 @@ class NSRDBWrapper:
                 points_block = match.group(1)
                 points_list = re.findall(r'\d+', points_block)
                 POINTS = [int(point) for point in points_list]
+                
+                # Update progress manager with actual number of points
+                total_points = len(POINTS)
+                progress_manager.update_total_points(job_id, total_points)
+                self.logger.info(f"Found {total_points} points in WKT area")
                 
                 # Set up the base URL
                 BASE_URL = f"https://developer.nrel.gov/api/nsrdb/v2/solar/{DATASET}-download.csv?"
@@ -291,27 +309,39 @@ class NSRDBWrapper:
             
         except KeyError as e:
             if "'outputs'" in str(e):
+                error_msg = "NSRDB API returned an invalid response. This could be due to an invalid API key, incorrect dataset name, or API service issues."
                 self.logger.error(f"NSRDB API error - invalid response format: {e}")
+                progress_manager.fail_job(job_id, error_msg)
                 return {
                     "success": False,
-                    "errors": ["NSRDB API returned an invalid response. This could be due to an invalid API key, incorrect dataset name, or API service issues."],
-                    "files": [],
+                    "job_id": job_id,
+                    "job_dir": str(job_dir),
+                    "errors": [error_msg],
+                    "files": {},
                     "logs": logs if 'logs' in locals() else ["Job failed due to API response error"]
                 }
             else:
+                error_msg = f"Configuration error: {str(e)}"
                 self.logger.error(f"KeyError in NSRDB job: {e}")
+                progress_manager.fail_job(job_id, error_msg)
                 return {
                     "success": False,
-                    "errors": [f"Configuration error: {str(e)}"],
-                    "files": [],
+                    "job_id": job_id,
+                    "job_dir": str(job_dir),
+                    "errors": [error_msg],
+                    "files": {},
                     "logs": logs if 'logs' in locals() else ["Job failed due to configuration error"]
                 }
         except Exception as e:
+            error_msg = str(e)
             self.logger.error(f"NSRDB job failed: {e}")
+            progress_manager.fail_job(job_id, error_msg)
             return {
                 "success": False,
-                "errors": [str(e)],
-                "files": [],
+                "job_id": job_id,
+                "job_dir": str(job_dir),
+                "errors": [error_msg],
+                "files": {},
                 "logs": logs if 'logs' in locals() else ["Job failed to start"]
             }
     

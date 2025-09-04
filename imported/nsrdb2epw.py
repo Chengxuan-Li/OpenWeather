@@ -30,8 +30,8 @@ def nsrdb2epw(WKT, DATASET, INTERVAL, YEARS, API_KEY, RESULTS_DIR='results/', LO
     
     
     def get_points(wkt: str='POINT(-74.25820375161103+42.684861252913805)', dataset=dataset_names['full-disc']):
-        req_template = 'https://maps-api.nrel.gov/bigdata/v2/sample-code?email=insert.your.email%40fake.com&wkt={}&attributes=dew_point&names=%272023%27,%272021%27&interval=15&to_utc=false&api_key=%7B%7BYOUR_API_KEY%7D%7D&dataset={}'
-        req = req_template.format(wkt.replace(' ', '+'), dataset)
+        req_template = 'https://maps-api.nrel.gov/bigdata/v2/sample-code?email={}&wkt={}&attributes=dew_point&names=%272023%27,%272021%27&interval=15&to_utc=false&api_key={}&dataset={}'
+        req = req_template.format(urllib.parse.quote(EMAIL), wkt.replace(' ', '+'), API_KEY, dataset)
         response = requests.get(req)
         script = dict(response.json())['outputs']['script']
     
@@ -64,7 +64,13 @@ def nsrdb2epw(WKT, DATASET, INTERVAL, YEARS, API_KEY, RESULTS_DIR='results/', LO
                 print(f'Making request for point group {id + 1} of {len(POINTS)}...')
     
                 if '.csv' in BASE_URL:
-                    url = BASE_URL + urllib.parse.urlencode(input_data, True)
+                    # Handle list parameters properly for CSV URL
+                    params = input_data.copy()
+                    params['names'] = name  # Use string instead of list
+                    params['location_ids'] = str(location_ids)  # Convert to string
+                    url = BASE_URL + urllib.parse.urlencode(params, True)
+                    print(f"Debug: URL = {url}")
+                    print(f"Debug: params = {params}")
                     # Note: CSV format is only supported for single point requests
                     # Suggest that you might append to a larger data frame
                     data = pd.read_csv(url)
@@ -364,7 +370,7 @@ def nsrdb2epw(WKT, DATASET, INTERVAL, YEARS, API_KEY, RESULTS_DIR='results/', LO
         print(f"Non-existent directory. New directory created at: {RESULTS_DIR}")
     
     POINTS = get_points(wkt=WKT, dataset=DATASET)
-    BASE_URL = "https://developer.nrel.gov/api/nsrdb/v2/solar/{}-download.csv?".format(DATASET)
+    BASE_URL = "https://developer.nrel.gov/api/nsrdb/v2/solar/{}-download.json?".format(DATASET)
     assert len(POINTS) > 0
     files_written = download_data()
     for file in files_written:

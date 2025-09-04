@@ -33,6 +33,17 @@ class ProgressManager:
         }
         logger.info(f"Created progress tracker for job {job_id}: {total_years} years, {total_points} points")
     
+    def update_total_points(self, job_id: str, total_points: int) -> None:
+        """Update the total points for a job after getting the actual count."""
+        if job_id not in self.jobs:
+            logger.warning(f"Job {job_id} not found in progress tracker")
+            return
+        
+        job = self.jobs[job_id]
+        job['total_points'] = total_points
+        job['total_downloads'] = job['total_years'] * total_points
+        logger.info(f"Updated job {job_id}: {job['total_years']} years, {total_points} points, {job['total_downloads']} total downloads")
+    
     def update_download_progress(self, job_id: str, year: str, point_id: str) -> None:
         """Update download progress for a specific year and point."""
         if job_id not in self.jobs:
