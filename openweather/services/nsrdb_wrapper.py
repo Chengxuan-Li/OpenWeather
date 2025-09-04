@@ -123,8 +123,9 @@ class NSRDBWrapper:
             job_dir = self.storage.create_job_directory(wkt, dataset, years)
             job_id = job_dir.name  # Use directory name as job ID
             
-            # Initialize progress tracking
-            progress_manager.create_job(job_id, len(years))
+            # Initialize progress tracking - use unique years count
+            unique_years = len(set(years))
+            progress_manager.create_job(job_id, unique_years)
             
             self.logger.info(f"Starting NSRDB job in directory: {job_dir}")
             
@@ -152,6 +153,9 @@ class NSRDBWrapper:
             
             # Create a patched version that handles the API correctly
             def patched_nsrdb2epw(WKT, DATASET, INTERVAL, YEARS, API_KEY, RESULTS_DIR='results/', LOCATION='Unknown', STATE='New York', COUNTRY='United States', EMAIL='example@mail.com'):
+                # Deduplicate years to avoid processing the same year multiple times
+                unique_years = list(set(YEARS))
+                self.logger.info(f"Processing unique years: {unique_years} (original: {YEARS})")
                 """Patched version of nsrdb2epw that uses correct API key and email."""
                 
                 import os
@@ -195,14 +199,13 @@ class NSRDBWrapper:
                 }
                 
                 files_written = []
-                total_years = len(YEARS)
                 total_points = len(POINTS)
-                total_downloads = total_years * total_points
+                total_downloads = len(unique_years) * total_points
                 completed_downloads = 0
                 completed_conversions = 0
                 
-                for year_idx, name in enumerate(YEARS):
-                    self.logger.info(f"Processing year: {name} ({year_idx + 1}/{total_years})")
+                for year_idx, name in enumerate(unique_years):
+                    self.logger.info(f"Processing year: {name} ({year_idx + 1}/{len(unique_years)})")
                     for point_idx, location_ids in enumerate(POINTS):
                         input_data['names'] = [name]
                         input_data['location_ids'] = location_ids

@@ -179,7 +179,7 @@ async def query_interface(
     )
 
 
-@router.post("/run", response_class=HTMLResponse)
+@router.post("/run")
 async def run_job(
     request: Request,
     wkt: str = Form(...),
@@ -201,52 +201,121 @@ async def run_job(
         else:
             year_list = [y.strip() for y in years.split(",") if y.strip()]
         
-        # Run NSRDB job
-        result = nsrdb_wrapper.run_nsrdb_job(
-            wkt=wkt,
-            dataset=dataset,
-            interval=interval,
-            years=year_list,
-            api_key=api_key,
-            email=email,
-            location=location,
-            state=state,
-            country=country,
-            convert_to_epw=convert_to_epw,
+        # Run the NSRDB job asynchronously
+        import asyncio
+        import threading
+        from datetime import datetime
+        
+        def run_job_async():
+            try:
+                result = nsrdb_wrapper.run_nsrdb_job(
+                    wkt=wkt,
+                    dataset=dataset,
+                    interval=interval,
+                    years=year_list,
+                    api_key=api_key,
+                    email=email,
+                    location=location,
+                    state=state,
+                    country=country,
+                    convert_to_epw=convert_to_epw,
+                )
+                logging.info(f"Job completed: {result}")
+            except Exception as e:
+                logging.error(f"Job failed: {e}")
+        
+        # Start job in background thread
+        thread = threading.Thread(target=run_job_async)
+        thread.daemon = True
+        thread.start()
+        
+        # Return immediately with job info
+        try:
+            job_dir = nsrdb_wrapper.storage.create_job_directory(wkt, dataset, year_list)
+            logging.info(f"Created job directory: {job_dir}")
+        except Exception as e:
+            logging.error(f"Error creating job directory: {e}")
+            return {
+                "success": False,
+                "errors": [f"Error creating job directory: {str(e)}"]
+            }
+        result = {
+            "success": True,
+            "job_id": job_dir.name,
+            "job_dir": str(job_dir),
+            "files": {"csv": [], "epw": []},
+            "logs": ["Job started in background"],
+            "summary": {
+                "job_name": job_dir.name,
+                "total_files": 0,
+                "total_size_formatted": "N/A",
+                "created": datetime.now().isoformat()
+            }
+        }
+        
+        # Return JSON response with job ID for progress tracking
+        return result
+        
+    except Exception as e:
+        logging.error(f"Error running job: {e}")
+        return {
+            "success": False,
+            "errors": [str(e)]
+        }
+
+
+@router.get("/results/{job_id}", response_class=HTMLResponse)
+async def view_results(request: Request, job_id: str):
+    """View results for a specific job."""
+    try:
+        # Get job results from storage
+        job_dir = settings.outputs_dir / job_id
+        if not job_dir.exists():
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        # Get files from job directory
+        csv_files = list(job_dir.glob("*.csv"))
+        epw_files = list(job_dir.glob("*.epw"))
+        
+        from datetime import datetime
+        
+        result = {
+            "success": True,
+            "job_id": job_id,
+            "job_dir": str(job_dir),
+            "files": {
+                "csv": [str(f) for f in csv_files],
+                "epw": [str(f) for f in epw_files]
+            },
+            "summary": {
+                "job_name": job_id,
+                "total_files": len(csv_files) + len(epw_files),
+                "total_size_formatted": "N/A",
+                "created": datetime.fromtimestamp(job_dir.stat().st_ctime).isoformat()
+            }
+        }
+        
+        return templates.TemplateResponse(
+            "results.html",
+            {
+                "request": request,
+                "result": result,
+                "job_summary": result.get("summary", {}),
+            }
         )
         
-        if result["success"]:
-            return templates.TemplateResponse(
-                "results.html",
-                {
-                    "request": request,
-                    "result": result,
-                    "job_summary": result.get("summary", {}),
-                }
-            )
-        else:
-            return templates.TemplateResponse(
-                "error.html",
-                {
-                    "request": request,
-                    "errors": result.get("errors", ["Unknown error"]),
-                    "datasets": settings.dataset_names,
-                    "dataset_intervals": settings.dataset_intervals,
-                    "dataset_years": settings.dataset_years,
-                    "form_data": {
-                        "wkt": wkt,
-                        "dataset": dataset,
-                        "interval": interval,
-                        "years": ",".join(years) if isinstance(years, list) else years,
-                        "api_key": api_key,
-                        "email": email,
-                        "location": location,
-                        "state": state,
-                        "country": country,
-                        "convert_to_epw": convert_to_epw,
-                    }
-                }
-            )
+    except Exception as e:
+        logging.error(f"Error viewing results: {e}")
+        return templates.TemplateResponse(
+            "error.html",
+            {
+                "request": request,
+                "errors": [str(e)],
+                "datasets": settings.dataset_names,
+                "dataset_intervals": settings.dataset_intervals,
+                "dataset_years": settings.dataset_years,
+            }
+        )
             
     except Exception as e:
         logging.error(f"Error running job: {e}")

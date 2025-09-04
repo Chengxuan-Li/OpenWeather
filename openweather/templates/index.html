@@ -8,7 +8,7 @@
     <div class="bg-white rounded-lg shadow-md p-6">
         <h2 class="text-2xl font-bold text-gray-900 mb-6">NSRDB Data Request</h2>
         
-        <form id="nsrdb-form" hx-post="/run" hx-target="#results" hx-swap="outerHTML">
+        <form id="nsrdb-form" action="/run" method="post">
             <!-- WKT Geometry -->
             <div class="form-group">
                 <label for="wkt" class="form-label">WKT Geometry *</label>
@@ -195,7 +195,6 @@
             <!-- Submit Button -->
             <div class="form-group">
                 <button type="submit" class="btn btn-primary w-full">
-                    <span class="htmx-indicator">Processing...</span>
                     <span>Download Weather Data</span>
                 </button>
             </div>
@@ -242,7 +241,7 @@
 <div id="results" class="mt-8"></div>
 
 <!-- Loading Indicator -->
-<div class="htmx-indicator fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-4 rounded-lg shadow-lg border">
+<div id="loading-indicator" class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-4 rounded-lg shadow-lg border" style="display: none;">
     <div class="flex items-center space-x-2">
         <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
         <span class="text-gray-700">Processing your request...</span>
@@ -446,6 +445,9 @@ if (document.getElementById('dataset').value) {
 
 // Handle form submission to convert multiple select to proper format
 document.getElementById('nsrdb-form').addEventListener('submit', function(e) {
+    console.log('Form submission started!'); // Debug log
+    e.preventDefault(); // Prevent default form submission
+    
     let yearSelect = document.getElementById('years');
     let selectedYears = Array.from(yearSelect.selectedOptions).map(option => option.value);
     
@@ -486,64 +488,145 @@ document.getElementById('nsrdb-form').addEventListener('submit', function(e) {
     submitBtn.innerHTML = '<span>Processing...</span>';
     submitBtn.disabled = true;
     
-    // Store job ID for progress tracking
-    let currentJobId = null;
+    // Submit form data via fetch
+    const formData = new FormData(this);
     
-    // Extract job ID from the response
-    const responseText = event.detail.xhr.responseText;
-    try {
-        const responseData = JSON.parse(responseText);
-        if (responseData.job_id) {
-            currentJobId = responseData.job_id;
-        }
-    } catch (e) {
-        console.log('Could not parse response for job ID');
+    // Show progress bars immediately
+    document.getElementById('progress-container').classList.remove('hidden');
+    document.getElementById('download-status').textContent = 'Starting download...';
+    
+    // Show EPW progress if conversion is enabled
+    if (convertToEpw) {
+        document.getElementById('epw-progress-container').classList.remove('hidden');
+        document.getElementById('epw-status').textContent = 'Waiting for downloads...';
     }
     
-    // Poll for real progress updates
-    const progressInterval = setInterval(async () => {
-        if (!currentJobId) {
-            return;
+    console.log('About to fetch /run...');
+    
+    // Add timeout to fetch request
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    
+    fetch('/run', {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal
+    })
+    .then(response => {
+        clearTimeout(timeoutId); // Clear timeout
+        console.log('Response status:', response.status);
+        console.log('Response ok:', response.ok);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
-        try {
-            const response = await fetch(`/api/progress/${currentJobId}`);
-            if (response.ok) {
-                const progress = await response.json();
-                
-                // Update download progress
-                document.getElementById('download-progress').style.width = progress.download_progress + '%';
-                document.getElementById('download-status').textContent = 
-                    `Downloading... ${Math.round(progress.download_progress)}% (${progress.completed_downloads}/${progress.total_downloads})`;
-                
-                // Update conversion progress if EPW conversion is enabled
-                if (convertToEpw) {
-                    document.getElementById('epw-progress').style.width = progress.conversion_progress + '%';
-                    document.getElementById('epw-status').textContent = 
-                        `Converting to EPW... ${Math.round(progress.conversion_progress)}% (${progress.completed_conversions}/${progress.total_downloads})`;
-                }
-                
-                // Stop polling if job is completed or failed
-                if (progress.status === 'completed' || progress.status === 'failed') {
-                    clearInterval(progressInterval);
-                    if (progress.status === 'failed') {
-                        document.getElementById('download-status').textContent = `Failed: ${progress.error || 'Unknown error'}`;
+        return response.json();
+    })
+    .then(data => {
+        console.log('Form submission response:', data);
+        if (data.success) {
+            // Store job ID for progress tracking
+            const currentJobId = data.job_id;
+            
+                        // Start polling immediately
+            console.log('Starting progress polling for job:', currentJobId);
+            const progressInterval = setInterval(async () => {
+                try {
+                    console.log('Fetching progress for job:', currentJobId);
+                    const response = await fetch(`/api/progress/${currentJobId}`);
+                    if (response.ok) {
+                        const progress = await response.json();
+                        
+                        console.log('Progress update:', progress);
+                        
+                        // Update download progress
+                        const downloadProgressBar = document.getElementById('download-progress');
+                        const downloadStatus = document.getElementById('download-status');
+                        
+                        if (downloadProgressBar && downloadStatus) {
+                            downloadProgressBar.style.width = progress.download_progress + '%';
+                            downloadStatus.textContent = 
+                                `Downloading... ${Math.round(progress.download_progress)}% (${progress.completed_downloads}/${progress.total_downloads})`;
+                            console.log('Updated download progress:', progress.download_progress + '%');
+                        } else {
+                            console.error('Download progress elements not found');
+                        }
+                        
+                                                    // Update conversion progress if EPW conversion is enabled
+                            if (convertToEpw) {
+                                const epwProgressBar = document.getElementById('epw-progress');
+                                const epwStatus = document.getElementById('epw-status');
+                                
+                                if (epwProgressBar && epwStatus) {
+                                    epwProgressBar.style.width = progress.conversion_progress + '%';
+                                    epwStatus.textContent = 
+                                        `Converting to EPW... ${Math.round(progress.conversion_progress)}% (${progress.completed_conversions}/${progress.total_downloads})`;
+                                    console.log('Updated EPW progress:', progress.conversion_progress + '%');
+                                    
+                                    // Show EPW progress container if it's hidden
+                                    const epwContainer = document.getElementById('epw-progress-container');
+                                    if (epwContainer) {
+                                        epwContainer.classList.remove('hidden');
+                                    }
+                                } else {
+                                    console.error('EPW progress elements not found');
+                                }
+                            }
+                        
+                        // Stop polling if job is completed or failed
+                        if (progress.status === 'completed' || progress.status === 'failed') {
+                            clearInterval(progressInterval);
+                            if (progress.status === 'completed') {
+                                // Redirect to results page
+                                window.location.href = `/results/${currentJobId}`;
+                            } else if (progress.status === 'failed') {
+                                document.getElementById('download-status').textContent = `Failed: ${progress.error || 'Unknown error'}`;
+                                submitBtn.innerHTML = '<span>Try Again</span>';
+                                submitBtn.disabled = false;
+                            }
+                        }
                     }
+                } catch (error) {
+                    console.error('Error fetching progress:', error);
+                    console.error('Response status:', response?.status);
                 }
-            }
-        } catch (error) {
-            console.error('Error fetching progress:', error);
-        }
-    }, 2000); // Poll every 2 seconds
+            }, 2000); // Poll every 2 seconds
+                 } else {
+             // Handle error
+             document.getElementById('download-status').textContent = `Error: ${data.errors ? data.errors.join(', ') : 'Unknown error'}`;
+             submitBtn.innerHTML = '<span>Try Again</span>';
+             submitBtn.disabled = false;
+             document.getElementById('progress-container').classList.add('hidden');
+         }
+    })
+         .catch(error => {
+         console.error('Error submitting form:', error);
+         document.getElementById('download-status').textContent = 'Error submitting form';
+         submitBtn.innerHTML = '<span>Try Again</span>';
+         submitBtn.disabled = false;
+         document.getElementById('progress-container').classList.add('hidden');
+     })
+     .catch(error => {
+         clearTimeout(timeoutId); // Clear timeout
+         console.error('Fetch error:', error);
+         if (error.name === 'AbortError') {
+             document.getElementById('download-status').textContent = 'Request timed out after 30 seconds';
+         } else {
+             document.getElementById('download-status').textContent = `Fetch error: ${error.message}`;
+         }
+         submitBtn.innerHTML = '<span>Try Again</span>';
+         submitBtn.disabled = false;
+         document.getElementById('progress-container').classList.add('hidden');
+     });
 });
 
-// HTMX loading indicator
-document.body.addEventListener('htmx:beforeRequest', function() {
-    document.querySelector('.htmx-indicator').style.display = 'block';
-});
-
-document.body.addEventListener('htmx:afterRequest', function() {
-    document.querySelector('.htmx-indicator').style.display = 'none';
-});
+    // Remove HTMX interference - we're using our own form handling
+    // HTMX loading indicator
+    // document.body.addEventListener('htmx:beforeRequest', function() {
+    //     document.querySelector('.htmx-indicator').style.display = 'block';
+    // });
+    
+    // document.body.addEventListener('htmx:afterRequest', function() {
+    //     document.querySelector('.htmx-indicator').style.display = 'none';
+    // });
 </script>
 {% endblock %}
