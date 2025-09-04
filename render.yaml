@@ -1,14 +1,9 @@
 services:
   - type: web
     name: openweather
-    env: python
+    env: docker
     plan: free
-    buildCommand: |
-      pip install --upgrade pip
-      pip install -r requirements.txt
-    startCommand: uvicorn openweather.main:app --host 0.0.0.0 --port $PORT
+    dockerfilePath: ./Dockerfile
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.7
       - key: PORT
         value: 10000

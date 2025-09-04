@@ -10,8 +10,9 @@ We've removed `pyproject.toml` and optimized for `requirements.txt` only.
 
 1. **Removed `pyproject.toml`** → `pyproject.toml.backup`
 2. **Simplified `setup.py`** → Minimal version
-3. **Updated `render.yaml`** → Explicit build commands
+3. **Updated `render.yaml`** → Docker deployment
 4. **Enhanced `requirements.txt`** → Fixed versions + setuptools
+5. **Fixed `Dockerfile`** → Uses requirements.txt instead of pyproject.toml
 
 ## Deployment Steps
 
@@ -24,23 +25,15 @@ We've removed `pyproject.toml` and optimized for `requirements.txt` only.
 ### Option 2: Manual
 1. **Create new Web Service** in Render
 2. **Connect your repository**
-3. **Set Build Command**: 
-   ```bash
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
-4. **Set Start Command**:
-   ```bash
-   uvicorn openweather.main:app --host 0.0.0.0 --port $PORT
-   ```
+3. **Set Environment**: `Docker`
+4. **Set Dockerfile Path**: `./Dockerfile`
 5. **Environment Variables**:
    - `PORT`: `10000`
-   - `PYTHON_VERSION`: `3.11.7`
 
 ## Expected Build Process
 
 ```
-✅ Installing pip...
+✅ Building Docker image...
 ✅ Installing requirements.txt...
 ✅ Starting uvicorn...
 ✅ Application ready!
@@ -56,9 +49,10 @@ We've removed `pyproject.toml` and optimized for `requirements.txt` only.
 ## Files Structure
 
 ```
-✅ render.yaml          # Automatic deployment config
+✅ render.yaml          # Docker deployment config
 ✅ requirements.txt     # Fixed dependency versions
 ✅ setup.py            # Minimal setup (no editable install)
+✅ Dockerfile          # Fixed to use requirements.txt
 ❌ pyproject.toml      # Removed (causing the issue)
 ✅ runtime.txt         # Python 3.11.7
 ```
