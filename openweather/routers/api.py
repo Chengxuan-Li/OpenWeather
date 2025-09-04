@@ -131,7 +131,9 @@ async def get_progress(job_id: str):
     Get progress for a specific job.
     Returns current progress as JSON.
     """
+    logging.info(f"Progress request for job: {job_id}")
     progress = progress_manager.get_progress(job_id)
+    logging.info(f"Progress response: {progress}")
     return progress
 
 

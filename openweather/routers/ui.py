@@ -225,21 +225,41 @@ async def run_job(
             country=safe_country,
         )
         
-        # Run the job in background
-        result = nsrdb_wrapper.run_nsrdb_job(
-            wkt=wkt,
-            dataset=dataset,
-            interval=interval,
-            years=years_list,
-            api_key=api_key,
-            email=email,
-            location=safe_location,
-            state=safe_state,
-            country=safe_country,
-            convert_to_epw=convert_to_epw,
-        )
+        # Get job ID for progress tracking
+        job_id = job_dir.name
         
-        return result
+        # Run the job in background thread
+        import threading
+        
+        def run_job_in_background():
+            try:
+                nsrdb_wrapper.run_nsrdb_job(
+                    wkt=wkt,
+                    dataset=dataset,
+                    interval=interval,
+                    years=years_list,
+                    api_key=api_key,
+                    email=email,
+                    location=safe_location,
+                    state=safe_state,
+                    country=safe_country,
+                    convert_to_epw=convert_to_epw,
+                )
+            except Exception as e:
+                logging.error(f"Background job error: {e}")
+                progress_manager.fail_job(job_id, str(e))
+        
+        # Start background thread
+        thread = threading.Thread(target=run_job_in_background)
+        thread.daemon = True
+        thread.start()
+        
+        # Return immediately with job ID for progress tracking
+        return {
+            "success": True,
+            "job_id": job_id,
+            "message": "Job started in background"
+        }
         
     except Exception as e:
         logging.error(f"Run job error: {e}")
