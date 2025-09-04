@@ -1,6 +1,7 @@
 # Output files and generated content
 outputs/
 outputs/*
+
 *.csv
 *.epw
 *.xlsx
