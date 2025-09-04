@@ -1,6 +1,6 @@
 # OpenWeather
 
-A web-based interface for the NSRDB to EPW pipeline, replicating the workflow from [NSRDB2EPW.ipynb](https://github.com/kastnerp/NREL-PSB3-2-EPW).
+A web-based interface for the NSRDB to EPW pipeline, replicating the workflow from [NSRDB2EPW](https://github.com/EnvironmentalSystemsLab/NSRDB2EPW).
 
 ## 🌟 Features
 
@@ -24,7 +24,7 @@ A web-based interface for the NSRDB to EPW pipeline, replicating the workflow fr
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-org/openweather.git
+   git clone https://github.com/Chengxuan-Li/OpenWeather.git
    cd openweather
    ```
 
@@ -322,7 +322,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- [NSRDB2EPW.ipynb](https://github.com/kastnerp/NREL-PSB3-2-EPW) - Original workflow
+- [NSRDB2EPW](https://github.com/EnvironmentalSystemsLab/NSRDB2EPW) - Original workflow
 - [NREL NSRDB](https://nsrdb.nrel.gov/) - Data source
 - [FastAPI](https://fastapi.tiangolo.com/) - Web framework
 - [Leaflet](https://leafletjs.com/) - Interactive maps
@@ -330,8 +330,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/your-org/openweather/issues)
-- **Documentation**: [Wiki](https://github.com/your-org/openweather/wiki)
+- **Issues**: [GitHub Issues](https://github.com/Chengxuan-Li/OpenWeather/issues)
+- **Documentation**: [Wiki](https://github.com/Chengxuan-Li/OpenWeather/wiki)
 - **Email**: team@openweather.com
 
 ## 🔄 Changelog
